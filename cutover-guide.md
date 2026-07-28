@@ -43,7 +43,7 @@ If your stickers differ, rewrite the table above before continuing — do not gu
 | Stage                       | Internet | Wi‑Fi                  | House LAN             | Proxmox UI                             |
 | --------------------------- | -------- | ---------------------- | --------------------- | -------------------------------------- |
 | 0–2 prep / VM install       | up       | up                     | up                    | up (usually)                           |
-| 3 bridge Apply + cable move | up       | up                     | up                    | **may drop** — have laptop cable ready |
+| 3 dual-cable LAN move + Apply | up       | up                     | up                    | usually stays up; laptop on emergency as backup |
 | 4 OPNsense install/config   | up       | up                     | up                    | up                                     |
 | 5 modem cutover             | **DOWN** | **DOWN***              | **DOWN** then new LAN | cable recommended                      |
 | 6 after success             | up       | **only if AP on LAN*** | up (`192.168.1.0/24`) | `https://192.168.1.10:8006`            |
@@ -61,9 +61,9 @@ Smart 3 in modem mode usually **kills its Wi‑Fi**. You need a separate AP on t
 - [x] Telekom Zugangsdaten written down (Anschlusskennung, Zugangsnummer, Kennwort)
 - [x] Stickers: `nic1=WAN`, `nic2=LAN` (or document your mapping)
 - [x] Laptop + Ethernet cable
-- [ ] Spare evening (60–90 min for modem cutover)
-- [ ] Wi‑Fi plan after cutover: spare AP **or** accept downtime
-- [ ] Rollback: Speedport 7 or Smart 3 back to full router (don’t factory‑reset the working Smart 3 config until OPNsense is proven)
+- [x] Spare evening (60–90 min for modem cutover)
+- [x] Wi‑Fi plan after cutover: spare AP **or** accept downtime
+- [x] Rollback: Speedport 7 or Smart 3 back to full router (don’t factory‑reset the working Smart 3 config until OPNsense is proven)
 
 Emergency laptop network (Windows):
 
@@ -86,8 +86,8 @@ cat /etc/network/interfaces
 ip -br a
 ```
 
-- [ ] Backup saved  
-- [ ] Confirm `vmbr0` uses `nic0`, IP `192.168.2.10/24`, gateway `192.168.2.1`
+- [x] Backup saved  
+- [x] Confirm `vmbr0` uses `nic0`, IP `192.168.2.10/24`, gateway `192.168.2.1`
 
 ---
 
@@ -126,8 +126,8 @@ Add second NIC now or in Stage 4:
 
 Then install.
 
-- [ ] VM created, not started (or stopped)
-- [ ] ISO attached
+- [x] VM created, not started (or stopped)
+- [x] ISO attached
 
 ---
 
@@ -183,9 +183,9 @@ Create bridge **without** taking `nic0` from `vmbr0` yet:
 
 Click **Apply Configuration**.
 
-- [ ] `vmbr1`, `vmbr2`, `vmbr3` exist  
-- [ ] UI still on `https://192.168.2.10:8006`  
-- [ ] House internet still up  
+- [x] `vmbr1`, `vmbr2`, `vmbr3` exist  
+- [x] UI still on `https://192.168.2.10:8006`  
+- [x] House internet still up  
 
 ---
 
@@ -193,38 +193,53 @@ Click **Apply Configuration**.
 
 ## Stage 3 — Move LAN + emergency (risk window)
 
-**Goal while Smart 3 still routes** `192.168.2.0/24`**:**
+**Goal while Smart 3 still routes `192.168.2.0/24`:**
 
 - `vmbr0`: ports = `nic2` only, keep IP `192.168.2.10/24`, gw `192.168.2.1`
 - `vmbr2`: ports = `nic0`, IP `10.99.99.1/24`
-- Physical: house switch cable moves **Realtek → I350 LAN (**`nic2`**)**
-- Realtek left **unplugged** (emergency)
+- Physical: house uplink ends on I350 **LAN (`nic2`)**; Realtek **empty** (emergency)
+
+**Why not “unplug Realtek, then Apply”?**  
+After you unplug Realtek, `https://192.168.2.10:8006` dies before you can Apply. Use the **dual-cable** sequence below instead.
+
+**Where you work:**
+
+| Role | Device |
+|------|--------|
+| Drive the Proxmox UI | Desk PC on Wi‑Fi is fine (`https://192.168.2.10:8006`) |
+| Guide / chat | Phone or second screen |
+| Break-glass | Laptop + Ethernet at the server (prepared, not required to click Apply) |
+
+Prepare laptop **before** Apply: static IP `10.99.99.2`, mask `255.255.255.0`, no gateway, bookmark `https://10.99.99.1:8006`.
 
 
 
-### 3a. Prepare physically
+### 3a. Dual-cable prepare (at the server)
 
-1. Sit at the server with laptop + cable.
-2. Note which switch cable is currently in **Realtek (**`nic0`**)**.
-3. Have that cable ready to move to sticker **LAN (**`nic2`**)**.
-
-
-
-### 3b. Edit bridges in UI (order matters)
-
-1. Edit `vmbr0`: set Bridge ports to `nic2` (replace `nic0`). Keep `192.168.2.10/24` and gateway `192.168.2.1`.
-2. Edit `vmbr2`: set Bridge ports to `nic0`. Keep `10.99.99.1/24`.
-3. **Do not Apply yet.**
+1. Leave the existing cable in **Realtek (`nic0`)** plugged into the switch/Smart 3 LAN.
+2. Plug a **second** cable: same switch/Smart 3 LAN → sticker **LAN (`nic2`)**.
+3. Both `nic0` and `nic2` should have link to the house LAN for a short time.
 
 
 
-### 3c. Cable + Apply
+### 3b. Edit bridges in UI (desk PC)
 
-1. Move Ethernet: switch → **LAN sticker (**`nic2`**)**.
-2. Immediately **Apply Configuration**.
-3. From laptop on house Wi‑Fi/LAN: open `https://192.168.2.10:8006`.
+1. Edit **`vmbr0`**: Bridge ports = **`nic2`** only (remove `nic0`). Keep `192.168.2.10/24` and gateway `192.168.2.1`.
+2. Edit **`vmbr2`**: Bridge ports = **`nic0`**. Keep `10.99.99.1/24`.
+3. **Apply Configuration** now (both physical ports still cabled).
+4. Confirm UI still works: `https://192.168.2.10:8006`
 
-**If UI dead:**
+
+
+### 3c. Remove Realtek from the house LAN
+
+1. At the server: **unplug** the cable from **Realtek (`nic0`)**. Leave Realtek empty.
+2. Keep the cable on **LAN (`nic2`)**.
+3. Confirm UI still works from the desk PC.
+
+**Optional emergency test:** laptop → Realtek with `10.99.99.2/24` → `https://10.99.99.1:8006` → then unplug again.
+
+**If UI dead after Apply:**
 
 1. Laptop → Realtek with static `10.99.99.2/24`
 2. `https://10.99.99.1:8006`
