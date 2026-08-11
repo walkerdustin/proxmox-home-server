@@ -1,0 +1,3 @@
+# OPNsense / router backups contain credentials — never commit
+opnsense-*.xml
+*.opnsense-backup.xml

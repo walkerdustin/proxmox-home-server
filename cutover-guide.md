@@ -1,6 +1,10 @@
 # Phase 1 cutover guide — Proxmox bridges → OPNsense → Smart 3 modem
 
+> **Superseded for Stage 5+:** Use [`opnsense-rebuild-guide.md`](opnsense-rebuild-guide.md) and [`memory.md`](memory.md) for the proven double-NAT → modem procedure (2026-08). Keep this file for Stage 0–4 history and dual-cable bridge moves.
+
 Follow in order. Do **not** skip verify steps.
+
+**Progress:** Stages **0–4 + modem cutover complete** (see rebuild guide). This document’s Stage 5 is historical.
 
 ## Target (final)
 
@@ -40,16 +44,45 @@ If your stickers differ, rewrite the table above before continuing — do not gu
 ## Outage map (summary)
 
 
-| Stage                       | Internet | Wi‑Fi                  | House LAN             | Proxmox UI                             |
-| --------------------------- | -------- | ---------------------- | --------------------- | -------------------------------------- |
-| 0–2 prep / VM install       | up       | up                     | up                    | up (usually)                           |
-| 3 dual-cable LAN move + Apply | up       | up                     | up                    | usually stays up; laptop on emergency as backup |
-| 4 OPNsense install/config   | up       | up                     | up                    | up                                     |
-| 5 modem cutover             | **DOWN** | **DOWN***              | **DOWN** then new LAN | cable recommended                      |
-| 6 after success             | up       | **only if AP on LAN*** | up (`192.168.1.0/24`) | `https://192.168.1.10:8006`            |
+| Stage                         | Internet | Wi‑Fi                  | House LAN             | Proxmox UI                                    |
+| ----------------------------- | -------- | ---------------------- | --------------------- | --------------------------------------------- |
+| 0–2 prep / VM install         | up       | up                     | up                    | up (done)                                     |
+| 3 dual-cable LAN move + Apply | up       | up                     | up                    | laptop on house Ethernet; emergency as backup |
+| 4 OPNsense install/config     | up       | up                     | up                    | up                                            |
+| 5 modem cutover               | **DOWN** | **DOWN***              | **DOWN** then new LAN | laptop on Ethernet (switch or emergency)      |
+| 6 after success               | up       | **only if AP on LAN*** | up (`192.168.1.0/24`) | `https://192.168.1.10:8006`                   |
 
 
 Smart 3 in modem mode usually **kills its Wi‑Fi**. You need a separate AP on the LAN after cutover, or accept no Wi‑Fi until then.
+
+---
+
+
+
+## Workstation for Stage 3+ (laptop + Ethernet)
+
+You finished Stages 0–2 on the gaming PC (Wi‑Fi). From **Stage 3 onward**, work from the **laptop at the server** with an Ethernet cable. Do **not** rely on Wi‑Fi for Proxmox Apply / cutover.
+
+
+| Role                        | Device / setup                                                                |
+| --------------------------- | ----------------------------------------------------------------------------- |
+| Drive Proxmox UI + OPNsense | **Laptop**, Ethernet to house switch (same `192.168.2.0/24` as Proxmox today) |
+| Cable swaps                 | You are at the rack — same session                                            |
+| Break-glass                 | Same laptop → Realtek (`nic0` / `vmbr2`) with static `10.99.99.2`             |
+
+
+**Why Ethernet to the switch (not Wi‑Fi):** Apply on bridges can briefly disrupt L2; a wired path on the house LAN is far more reliable than Wi‑Fi while you move `vmbr0` from Realtek → I350 LAN.
+
+**Laptop house-LAN settings (Stage 3–4, before cutover):** DHCP from Smart 3 is fine (`192.168.2.x`). Browser: `https://192.168.2.10:8006`.
+
+**Emergency laptop network (Windows) — only when plugged into Realtek:**
+
+- IP `10.99.99.2`
+- Mask `255.255.255.0`
+- Gateway empty
+- Browser `https://10.99.99.1:8006`
+
+After emergency test, set the adapter back to DHCP (or your normal profile) before continuing on the switch.
 
 ---
 
@@ -60,17 +93,11 @@ Smart 3 in modem mode usually **kills its Wi‑Fi**. You need a separate AP on t
 - [x] OPNsense ISO uploaded to Proxmox
 - [x] Telekom Zugangsdaten written down (Anschlusskennung, Zugangsnummer, Kennwort)
 - [x] Stickers: `nic1=WAN`, `nic2=LAN` (or document your mapping)
-- [x] Laptop + Ethernet cable
+- [x] Stages 0–2 done (`vmbr1`/`vmbr2`/`vmbr3` exist; UI still `https://192.168.2.10:8006`)
+- [x] Laptop + Ethernet cable (you are on this machine now)
 - [x] Spare evening (60–90 min for modem cutover)
 - [x] Wi‑Fi plan after cutover: spare AP **or** accept downtime
 - [x] Rollback: Speedport 7 or Smart 3 back to full router (don’t factory‑reset the working Smart 3 config until OPNsense is proven)
-
-Emergency laptop network (Windows):
-
-- IP `10.99.99.2`
-- Mask `255.255.255.0`
-- Gateway empty
-- Browser `https://10.99.99.1:8006`
 
 ---
 
@@ -193,51 +220,57 @@ Click **Apply Configuration**.
 
 ## Stage 3 — Move LAN + emergency (risk window)
 
-**Goal while Smart 3 still routes `192.168.2.0/24`:**
+**Status:** Stages 0–2 are done. You are on the **laptop** with Ethernet.
+
+**Goal while Smart 3 still routes** `192.168.2.0/24`**:**
 
 - `vmbr0`: ports = `nic2` only, keep IP `192.168.2.10/24`, gw `192.168.2.1`
 - `vmbr2`: ports = `nic0`, IP `10.99.99.1/24`
-- Physical: house uplink ends on I350 **LAN (`nic2`)**; Realtek **empty** (emergency)
+- Physical: house uplink ends on I350 **LAN (**`nic2`**)**; Realtek **empty** (emergency)
 
 **Why not “unplug Realtek, then Apply”?**  
 After you unplug Realtek, `https://192.168.2.10:8006` dies before you can Apply. Use the **dual-cable** sequence below instead.
 
-**Where you work:**
+**Setup before you touch bridges:**
 
-| Role | Device |
-|------|--------|
-| Drive the Proxmox UI | Desk PC on Wi‑Fi is fine (`https://192.168.2.10:8006`) |
-| Guide / chat | Phone or second screen |
-| Break-glass | Laptop + Ethernet at the server (prepared, not required to click Apply) |
-
-Prepare laptop **before** Apply: static IP `10.99.99.2`, mask `255.255.255.0`, no gateway, bookmark `https://10.99.99.1:8006`.
+1. Plug laptop Ethernet into the **house switch** (or Smart 3 LAN) — same L2 as Proxmox today.
+2. Confirm DHCP IP in `192.168.2.0/24` and open `https://192.168.2.10:8006`.
+3. Keep this browser tab ready; do cable work at the rack without relying on Wi‑Fi.
 
 
 
 ### 3a. Dual-cable prepare (at the server)
 
-1. Leave the existing cable in **Realtek (`nic0`)** plugged into the switch/Smart 3 LAN.
-2. Plug a **second** cable: same switch/Smart 3 LAN → sticker **LAN (`nic2`)**.
+1. Leave the existing cable in **Realtek (**`nic0`**)** plugged into the switch/Smart 3 LAN.
+2. Plug a **second** cable: same switch/Smart 3 LAN → sticker **LAN (**`nic2`**)**.
 3. Both `nic0` and `nic2` should have link to the house LAN for a short time.
+4. Laptop stays on the switch (its own cable). Do **not** steal the Realtek cable for the laptop yet.
 
 
 
-### 3b. Edit bridges in UI (desk PC)
+### 3b. Edit bridges in UI (laptop on house Ethernet)
 
-1. Edit **`vmbr0`**: Bridge ports = **`nic2`** only (remove `nic0`). Keep `192.168.2.10/24` and gateway `192.168.2.1`.
-2. Edit **`vmbr2`**: Bridge ports = **`nic0`**. Keep `10.99.99.1/24`.
+1. Edit `vmbr0`: Bridge ports = `nic2` only (remove `nic0`). Keep `192.168.2.10/24` and gateway `192.168.2.1`.
+2. Edit `vmbr2`: Bridge ports = `nic0`. Keep `10.99.99.1/24`.
 3. **Apply Configuration** now (both physical ports still cabled).
-4. Confirm UI still works: `https://192.168.2.10:8006`
+4. Confirm UI still works from the laptop: `https://192.168.2.10:8006`
 
 
 
 ### 3c. Remove Realtek from the house LAN
 
-1. At the server: **unplug** the cable from **Realtek (`nic0`)**. Leave Realtek empty.
-2. Keep the cable on **LAN (`nic2`)**.
-3. Confirm UI still works from the desk PC.
+1. At the server: **unplug** the cable from **Realtek (**`nic0`**)**. Leave Realtek empty.
+2. Keep the cable on **LAN (**`nic2`**)**.
+3. Confirm UI still works from the laptop on the switch.
 
-**Optional emergency test:** laptop → Realtek with `10.99.99.2/24` → `https://10.99.99.1:8006` → then unplug again.
+**Emergency test (recommended — same laptop, one cable move):**
+
+1. Note: you will briefly lose house-LAN access on the laptop.
+2. Unplug laptop from the switch → plug into **Realtek (**`nic0`**)**.
+3. Set Windows adapter to static `10.99.99.2` / `255.255.255.0` / no gateway.
+4. Open `https://10.99.99.1:8006` — confirm Proxmox UI.
+5. Unplug from Realtek → plug laptop back into the **switch**.
+6. Set adapter back to **DHCP**. Confirm `https://192.168.2.10:8006` again.
 
 **If UI dead after Apply:**
 
@@ -249,6 +282,8 @@ Prepare laptop **before** Apply: static IP `10.99.99.2`, mask `255.255.255.0`, n
 
 
 ### 3d. Verify
+
+On Proxmox shell (UI → Shell, or SSH from laptop):
 
 ```bash
 ip -br a
@@ -263,9 +298,9 @@ Expect:
 - `vmbr2` has `10.99.99.1`, slave `nic0`  
 - `nic0` has no house cable  
 
-- [ ] Proxmox UI via `192.168.2.10`  
+- [ ] Proxmox UI via `192.168.2.10` from laptop on switch  
 - [ ] Internet on laptop still works (Smart 3)  
-- [ ] Emergency port tested once (optional but recommended)
+- [ ] Emergency port tested once (recommended)
 
 ---
 
@@ -273,7 +308,7 @@ Expect:
 
 ## Stage 4 — OPNsense NICs + install (house still online)
 
-
+Laptop stays on house Ethernet → switch → `https://192.168.2.10:8006`.
 
 ### 4a. Attach NICs
 
@@ -290,7 +325,7 @@ WAN cable to modem stays **unplugged** until Stage 5 (or plugged but unused).
 
 ### 4b. Install
 
-1. Start VM → Console
+1. Start VM → Console (from laptop browser)
 2. Install OPNsense to disk (UFS OK)
 3. Set root password
 4. Remove ISO from Hardware, reboot
@@ -322,7 +357,7 @@ From Proxmox shell:
 ping -c2 192.168.1.1
 ```
 
-From Windows (SSH tunnel):
+**Option A — SSH tunnel (simple, keeps laptop on DHCP** `.2`**):**
 
 ```powershell
 ssh -L 8443:192.168.1.1:443 root@192.168.2.10
@@ -331,10 +366,22 @@ ssh -L 8443:192.168.1.1:443 root@192.168.2.10
 Browser: `https://127.0.0.1:8443`  
 Login: `root` / your password  
 
+**Option B — secondary IP on the laptop Ethernet adapter (no tunnel):**
+
+Keep DHCP for `192.168.2.x`, then add a second address:
+
+```powershell
+# Replace "Ethernet" with your adapter name from Get-NetAdapter
+New-NetIPAddress -InterfaceAlias "Ethernet" -IPAddress 192.168.1.2 -PrefixLength 24
+```
+
+Browser: `https://192.168.1.1`  
+Remove later with `Remove-NetIPAddress` (or reboot) when done.
+
 In OPNsense: update, set hostname, **disable LAN DHCP** until cutover (or restrict), install HAProxy later — not now.
 
 - [ ] OPNsense installed  
-- [ ] GUI reachable via tunnel  
+- [ ] GUI reachable (tunnel or secondary IP)  
 - [ ] LAN `192.168.1.1`, DHCP off for house  
 
 ---
@@ -343,11 +390,19 @@ In OPNsense: update, set hostname, **disable LAN DHCP** until cutover (or restri
 
 ## Stage 5 — Modem cutover (planned outage)
 
-**Everyone offline for this stage.** Laptop cabled to switch or emergency port.
+**Everyone offline for this stage.** Work only from the **laptop on Ethernet**.
+
+Before you start the outage window:
+
+- Laptop Ethernet → **house switch** (not Wi‑Fi).
+- Bookmark `https://192.168.2.10:8006` (old) and prepare for `https://192.168.1.10:8006` / `https://192.168.1.1`.
+- Know the emergency fallback: laptop → Realtek, static `10.99.99.2` → `https://10.99.99.1:8006`.
+
+
 
 ### 5a. Final OPNsense prep (still on old internet)
 
-In OPNsense GUI (tunnel):
+In OPNsense GUI (tunnel or secondary IP from Stage 4):
 
 1. **System → Firmware** updated
 2. WAN: prepare **PPPoE** with Telekom credentials
@@ -375,6 +430,14 @@ Edit `vmbr0`:
 
 Apply when OPNsense is running and will be the gateway (or you will use emergency access).
 
+**Laptop tip:** After this Apply, your laptop’s DHCP `.2` address may no longer reach Proxmox until OPNsense DHCP is live. If the UI drops:
+
+1. Prefer: wait until Stage 5c–5d and renew DHCP (`ipconfig /renew`) once OPNsense is gateway.
+2. Or: emergency port → fix / finish Apply.
+3. Or: set laptop static `192.168.1.2/24`, gateway `192.168.1.1`, then open `https://192.168.1.10:8006`.
+
+
+
 ### 5c. Physical modem cutover
 
 1. Smart 3 UI → set **Exklusiver Modem-Modus** / modem mode (wording varies).
@@ -387,7 +450,7 @@ Apply when OPNsense is running and will be the gateway (or you will use emergenc
 
 ### 5d. Verify
 
-From laptop on switch (DHCP):
+From laptop on switch (DHCP renew if needed — expect `192.168.1.x`):
 
 - [ ] IP in `192.168.1.0/24`  
 - [ ] Ping `192.168.1.1` (OPNsense)  
@@ -402,8 +465,8 @@ Speedtest roughly ~50/20 class.
 
 1. Smart 3 back to **full router**
 2. Modem cable back to old layout; Proxmox LAN cable to Smart 3 LAN/switch as before Stage 5
-3. Temporarily set Proxmox `vmbr0` back to `192.168.2.10/24` gw `192.168.2.1` if needed
-4. House works again; debug OPNsense PPPoE later
+3. Temporarily set Proxmox `vmbr0` back to `192.168.2.10/24` gw `192.168.2.1` if needed (emergency port if UI unreachable)
+4. Laptop back to DHCP on switch; house works again; debug OPNsense PPPoE later
 
 ---
 
@@ -411,9 +474,11 @@ Speedtest roughly ~50/20 class.
 
 ## Stage 6 — Stabilize
 
+Laptop on house Ethernet (`192.168.1.0/24` via DHCP):
+
 - [ ] OPNsense: backup config (System → Configuration → Backups)  
 - [ ] Proxmox: confirm `vmbr1` still has **no** IP  
-- [ ] Emergency port still empty; retest once  
+- [ ] Emergency port still empty; retest once from laptop  
 - [ ] Wi‑Fi: plug AP into switch, or document “no Wi‑Fi until AP”  
 - [ ] Update `memory.md` with new IPs and sticker labels  
 - [ ] Leave Speedport 7 / Smart 3 rollback path documented  
