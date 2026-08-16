@@ -1,0 +1,4 @@
+# Configs for this component (sanitized only)
+
+Put compose snippets, HAProxy exports (redacted), and notes here.
+Never commit live OPNsense XML or passwords — see repo `.gitignore`.

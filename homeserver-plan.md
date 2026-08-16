@@ -44,11 +44,15 @@ Es wird **kein CPU-Pinning** verwendet. Die Priorisierung erfolgt über Proxmox 
     *   **Aufgabe:** Cloud-Speicher für Freunde (öffentlich erreichbar ohne VPN). Befindet sich zwingend in der DMZ.
 
 #### 5. Ingress, Routing & SSL-Konzept
-*   **Domain:** Eine `.de`-Domain (z. B. `dustinwalker.de`) ist vorhanden. DynDNS läuft über OPNsense.
-*   **SSL Passthrough (Layer 4 Routing):** OPNsense nimmt den HTTPS-Traffic (Port 443) an, macht aber **keine** SSL-Termination. OPNsense nutzt SNI-Routing (z. B. via HAProxy-Plugin):
-    *   Regel 1: Traffic für `cloud.dustinwalker.de` wird verschlüsselt an die Seafile-VM weitergeleitet.
-    *   Regel 2 (Wildcard): Traffic für `*.dustinwalker.de` wird verschlüsselt an die Dockploy-VM weitergeleitet.
-*   **SSL-Termination:** Wird von den Endpunkten selbst übernommen. Traefik (in Dockploy) und Seafile beziehen und verwalten ihre eigenen Let's Encrypt Zertifikate.
+*   **Domain:** `dustinwalker.de` (Porkbun registrar, **Netlify DNS**). DynDNS via OPNsense keeping public records updated.
+*   **Public name (storage):** `cloud.dustinwalker.de` → oCIS VM in DMZ (`10.10.10.10`).
+*   **SSL Passthrough (Layer 4):** OPNsense HAProxy does **not** terminate TLS on `:443`. It routes by SNI only:
+    *   `cloud.dustinwalker.de` → oCIS VM `:443` (Traefik)
+    *   Later: app hostnames / `*.…` → Dockploy Traefik `:443`
+*   **HTTP `:80`:** HAProxy routes by `Host` to the same VMs for Let’s Encrypt HTTP-01 (and redirects).
+*   **SSL-Termination:** On each app VM. oCIS uses the **official Compose stack (Traefik + LE)**; Collabora **off**; Tika **on**. Dockploy keeps its own Traefik later.
+*   **LAN access:** Split DNS (Unbound override → `10.10.10.10`) to avoid hairpin NAT issues.
+*   **Detail plan / edge cases:** [`ocis-public-ingress-plan.md`](ocis-public-ingress-plan.md).
 
 #### 6. Storage-Konfiguration (ZFS) & Backup
 *   **ZFS-Pool (HDDs):** Die 3x 2 TB HDDs werden im Proxmox-Host als **RAIDZ1** konfiguriert (ca. 3,5 TB nutzbar).

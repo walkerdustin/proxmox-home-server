@@ -2,7 +2,7 @@
 
 Working notes for the Proxmox home-server build. Update as hardware/network facts change.
 
-**Last verified:** 2026-08-11 — Host RAM upgraded to 32 GB (usable ~31.2 GiB); OPNsense PPPoE + Smart 3 modem mode still production.
+**Last verified:** 2026-08-16 — DMZ up; oCIS public at `https://cloud.dustinwalker.de` (HAProxy → Traefik). Component docs: [`homelab-components/`](homelab-components/).
 
 ## Current production topology
 
@@ -27,7 +27,7 @@ Working notes for the Proxmox home-server build. Update as hardware/network fact
 | OPNsense LAN | `192.168.1.1/24` (DHCP server on) |
 | DHCP pool | `192.168.1.100`–`192.168.1.200` |
 | Proxmox management | `https://192.168.1.10:8006` |
-| OPNsense GUI | `https://192.168.1.1` |
+| OPNsense GUI | `https://192.168.1.1:8443` (LAN only; port moved for HAProxy) |
 | Wi‑Fi | UniFi U7 on PoE switch behind OPNsense (Smart 3 Wi‑Fi off) |
 | Proxmox hostname | `pve` |
 | Proxmox version | VE 8.2.x (no-subscription repo); kernel `7.0.14-*-pve` |
@@ -65,7 +65,7 @@ LAN: `vtnet1` → `vmbr0` / `nic2`.
 | `vmbr0` | `nic2` | `192.168.1.10/24`, gateway `192.168.1.1` |
 | `vmbr1` | `nic1` | none |
 | `vmbr2` | `nic0` | `10.99.99.1/24` |
-| `vmbr3` | none | DMZ Phase 2 |
+| `vmbr3` | none | DMZ — OPNsense `vtnet2` `10.10.10.1/24`; oCIS `10.10.10.10` |
 
 ## Storage
 
@@ -75,7 +75,8 @@ LAN: `vtnet1` → `vmbr0` / `nic2`.
 | Disk A | Samsung 850 EVO 250GB — `S2CJNXAG514758J` (`…-part3`) |
 | Disk B | Samsung 860 EVO 500GB — `S3Z2NB0KA29651E` (`…-part3`) |
 | ESPs | `A0B2-D849` (250GB), `041E-0F11` (500GB) |
-| Other disks | HDDs + ~120GB Crucial — unused for now |
+| `tank` | RAIDZ1 HDDs — oCIS data VDisk (`vm-101` scsi1 ~3 TB) |
+| Other | ~120GB Crucial — planned local backup target later |
 
 ## Recovery notes (learned the hard way)
 
@@ -90,6 +91,7 @@ LAN: `vtnet1` → `vmbr0` / `nic2`.
 
 | File | Role |
 |------|------|
+| [`homelab-components/`](homelab-components/) | As-built docs per component (OPNsense, oCIS, Proxmox, …) |
 | [`opnsense-rebuild-guide.md`](opnsense-rebuild-guide.md) | **Authoritative** rebuild / cutover from scratch (double NAT → modem) |
 | [`cutover-guide.md`](cutover-guide.md) | Historical Stage 0–4 notes; Stage 5 superseded |
 
@@ -103,4 +105,21 @@ LAN: `vtnet1` → `vmbr0` / `nic2`.
 - [x] UniFi U7 behind OPNsense; Smart 3 Wi‑Fi off
 - [x] Smart 3 modem mode + OPNsense as edge router
 - [x] Host RAM 32 GB installed (Phase 1 hardware complete)
-- [ ] Phase 2 apps (Dockploy, Seafile, DMZ, HAProxy/SNI); consider ZFS ARC cap ~4 GB when HDD pool is in use
+- [x] DMZ + HAProxy SNI + oCIS public (`cloud.dustinwalker.de`); Tika on, Collabora off; Tika search smoke-tested
+
+### Open to-do (post–public oCIS)
+
+Detail + order: [`homelab-components/ocis/README.md`](homelab-components/ocis/README.md) §7.
+
+- [ ] DMZ firewall harden (drop TEMP `DMZ → any`; block DMZ → LAN)
+- [ ] Point clients at `https://cloud.dustinwalker.de`
+- [ ] oCIS SMTP (Zoho / notifications)
+- [ ] Fresh OPNsense XML backup (private)
+- [ ] Kopia offsite → friend’s TrueNAS (oCIS live path; Seafile idea notes in [`homelab-components/seafile/`](homelab-components/seafile/))
+- [ ] Local ZFS snapshots (sanoid) for oCIS data disk
+- [x] Scrutiny hub LXC 102 + host collector + **15‑min timer** (temps/history) — [`homelab-components/scrutiny/`](homelab-components/scrutiny/)
+- [ ] Scrutiny email alerts (Zoho / shoutrrr)
+- [ ] DynDNS for Netlify `cloud` A record
+- [ ] ZFS ARC ~4 GB cap if needed under load
+- [ ] Crucial SSD as local backup target
+- [ ] Dockploy — see [`homelab-components/dockploy/`](homelab-components/dockploy/)

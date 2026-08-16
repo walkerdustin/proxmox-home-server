@@ -1,3 +1,26 @@
-# OPNsense / router backups contain credentials — never commit
+# --- Secrets / full device backups (never commit) ---
+
+# OPNsense XML exports (credentials, keys, Wi‑Fi, etc.)
 opnsense-*.xml
 *.opnsense-backup.xml
+config-opnsense*.xml
+**/configs/*.xml
+homelab-components/opnsense/**/*.xml
+
+# Telekom Speedport / Smart 3 config backups
+Speedport*.config
+**/*Speedport*.config
+homelab-components/telekom-smart3/*.config
+
+# Live env files (sanitized *.env.example is OK)
+**/.env
+!**/*.env.example
+**/*.env.local
+**/secrets/
+
+# Accidental dumps
+*.pem
+*.key
+id_rsa*
+*.p12
+*.pfx

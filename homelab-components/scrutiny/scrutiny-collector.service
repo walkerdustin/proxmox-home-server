@@ -1,0 +1,10 @@
+# Install on Proxmox host: /etc/systemd/system/scrutiny-collector.service
+[Unit]
+Description=Scrutiny SMART collector
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/scrutiny/bin/scrutiny-collector-metrics run --api-endpoint http://192.168.1.20:8080 --host-id pve
+Nice=10

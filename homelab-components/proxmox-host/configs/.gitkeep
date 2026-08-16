@@ -1,0 +1,4 @@
+# Host configs (sanitized)
+
+Examples: `/etc/network/interfaces` excerpts, bridge notes.
+Do not commit private keys or full backup archives with secrets.

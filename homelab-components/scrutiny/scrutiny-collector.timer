@@ -1,0 +1,12 @@
+# Install on Proxmox host: /etc/systemd/system/scrutiny-collector.timer
+[Unit]
+Description=Run Scrutiny collector every 15 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=15min
+AccuracySec=1min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
