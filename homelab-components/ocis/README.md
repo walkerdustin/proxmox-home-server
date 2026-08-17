@@ -1,8 +1,19 @@
 # ownCloud Infinite Scale (oCIS)
 
-**Status:** Live (public HTTPS)  
+**Status:** **Decommissioned 2026-08-17** — replaced by [`../seafile/`](../seafile/) on the same VM  
+**Was live:** 2026-08-16 → 2026-08-17  
 **Last verified:** 2026-08-16  
-**Public URL:** https://cloud.dustinwalker.de  
+**Former URL:** https://cloud.dustinwalker.de (the hostname now serves Seafile)  
+
+> **This document is history, not an as-built reference.** The stack was removed
+> (`docker compose down -v`, images pruned, `/mnt/data/ocis` and
+> `/opt/compose/ocis` deleted). It is kept because the ingress model,
+> networking, and hard-won failure modes below still describe the live system —
+> only the application changed. Current stack: [`../seafile/README.md`](../seafile/README.md).
+>
+> Reason for the switch: no per-user usage/quota/stats table in the oCIS admin
+> UI. Cost of the switch: loss of Tika full-text content search. Cutover
+> record: [`../seafile/cutover-from-ocis.md`](../seafile/cutover-from-ocis.md).
 
 Planning / edge cases: [`../../ocis-public-ingress-plan.md`](../../ocis-public-ingress-plan.md) · Architecture notes: [`../../storage_server_setup.md`](../../storage_server_setup.md)
 
@@ -133,9 +144,15 @@ docker compose exec ocis ocis idm resetpassword
 
 ---
 
-## 7. Open to-do
+## 7. Open to-do — MOVED
 
-Rough order for what’s left after public HTTPS. Check items off here (and in [`../../memory.md`](../../memory.md) for host-wide items).
+> **Do not work from this list.** It has moved to
+> [`../seafile/README.md`](../seafile/README.md) §7, where the still-open items
+> (DMZ hardening, clients, SMTP, OPNsense XML backup, Kopia offsite, ZFS
+> snapshots, DynDNS) now read against the live Seafile stack. The list below is
+> the frozen 2026-08-16 state, kept only to show what was already done.
+
+Historical list follows. Host-wide items are in [`../../memory.md`](../../memory.md).
 
 ### Soon (safety / correctness)
 

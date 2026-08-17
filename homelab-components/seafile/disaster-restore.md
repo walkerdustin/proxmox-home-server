@@ -1,8 +1,8 @@
-# Disaster restore: new disks → Proxmox → Seafile from TrueNAS (idea stage)
+# Disaster restore: new disks → Proxmox → Seafile from TrueNAS
 
-**Status:** Idea / runbook draft — not tested on this homelab  
-**Last updated:** 2026-08-16  
-**Assumes:** Nightly **DB-first** dumps + Seafile data in an **encrypted Kopia (or Restic) repo** on friend’s TrueNAS ([`backup-to-truenas.md`](backup-to-truenas.md))
+**Status:** Runbook draft — **not yet tested** on this homelab  
+**Last updated:** 2026-08-17  
+**Assumes:** Nightly **DB-first** dumps (live since 2026-08-17) + Seafile data in an **encrypted Kopia (or Restic) repo** on friend’s TrueNAS — the repo half is **still open**, so today this runbook is only executable from local dumps ([`backup-to-truenas.md`](backup-to-truenas.md))
 
 Parent: [`README.md`](README.md)
 

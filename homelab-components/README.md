@@ -12,8 +12,8 @@ Long planning notes and cutover playbooks stay in the repo root (e.g. `homeserve
 | [`opnsense/`](opnsense/) | OPNsense VM 100 (router, firewall, HAProxy) | Live |
 | [`telekom-smart3/`](telekom-smart3/) | Speedport Smart 3 modem | Live |
 | [`unifi/`](unifi/) | UniFi U7 Wi‑Fi | Live |
-| [`ocis/`](ocis/) | ownCloud Infinite Scale | Live |
-| [`seafile/`](seafile/) | Seafile (backup/restore research) | **Idea only** |
+| [`seafile/`](seafile/) | Seafile 13 CE (private file cloud) | Live |
+| [`ocis/`](ocis/) | ownCloud Infinite Scale | **Decommissioned 2026-08-17** (history) |
 | [`scrutiny/`](scrutiny/) | Scrutiny SMART / drive temps (LXC 102) | Live |
 | [`dockploy/`](dockploy/) | Dockploy / public apps | Planned |
 

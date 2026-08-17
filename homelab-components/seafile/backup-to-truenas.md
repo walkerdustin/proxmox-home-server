@@ -1,7 +1,7 @@
 # Seafile → friend’s TrueNAS backup (idea stage)
 
-**Status:** Idea / research notes — not implemented  
-**Last updated:** 2026-08-16  
+**Status:** Design **adopted** — nightly SQL dumps live since 2026-08-17; Kopia offsite still open  
+**Last updated:** 2026-08-17  
 **Primary sources:** [Seafile Backup and Recovery](https://manual.seafile.com/latest/administration/backup_recovery/), [Seafile FSCK](https://manual.seafile.com/latest/administration/seafile_fsck/), Datamate Restic extension docs, community Kopia/Borg/rsync threads  
 
 Parent: [`README.md`](README.md) · Disaster path: [`disaster-restore.md`](disaster-restore.md)
@@ -138,7 +138,10 @@ Datamate documents a similar idea with **Restic** for Docker Seafile (encrypted,
 
 ---
 
-## 8. Comparison: same TrueNAS target with live oCIS
+## 8. Comparison: same TrueNAS target with oCIS (historical)
+
+oCIS was decommissioned 2026-08-17; the right-hand column is now the *former*
+stack, kept because it records what the extra choreography below actually buys.
 
 | | Seafile (idea) | oCIS (live) |
 |--|----------------|-------------|
@@ -150,11 +153,11 @@ Switching for admin UX **increases** backup choreography cost; it does **not** r
 
 ---
 
-## 9. Idea-stage open to-do (backup only)
+## 9. Open to-do (backup only)
 
+- [x] Dump script + systemd timer — `backup-sql.sh` + `seafile-backup-sql.timer`, daily 03:15, 14-day local retention ([`README.md`](README.md) §6)
 - [ ] Agree SFTP vs MinIO with friend  
 - [ ] Choose Kopia vs Restic  
-- [ ] Draft dump script + systemd timer (when leaving idea stage)  
-- [ ] Define retention policy numbers  
+- [ ] Define **offsite** retention numbers (local is 14 days)  
 - [ ] First restore drill on disposable VM  
 - [ ] Document library encryption policy for friends  

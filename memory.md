@@ -2,7 +2,7 @@
 
 Working notes for the Proxmox home-server build. Update as hardware/network facts change.
 
-**Last verified:** 2026-08-16 — DMZ up; oCIS public at `https://cloud.dustinwalker.de` (HAProxy → Traefik). Component docs: [`homelab-components/`](homelab-components/).
+**Last verified:** 2026-08-17 — DMZ up; **Seafile 13 CE** public at `https://cloud.dustinwalker.de` (HAProxy → Caddy). oCIS was replaced on the same VM 2026-08-17; the ingress model survived unchanged. Component docs: [`homelab-components/`](homelab-components/).
 
 ## Current production topology
 
@@ -65,7 +65,7 @@ LAN: `vtnet1` → `vmbr0` / `nic2`.
 | `vmbr0` | `nic2` | `192.168.1.10/24`, gateway `192.168.1.1` |
 | `vmbr1` | `nic1` | none |
 | `vmbr2` | `nic0` | `10.99.99.1/24` |
-| `vmbr3` | none | DMZ — OPNsense `vtnet2` `10.10.10.1/24`; oCIS `10.10.10.10` |
+| `vmbr3` | none | DMZ — OPNsense `vtnet2` `10.10.10.1/24`; Seafile VM 101 `10.10.10.10` |
 
 ## Storage
 
@@ -75,7 +75,8 @@ LAN: `vtnet1` → `vmbr0` / `nic2`.
 | Disk A | Samsung 850 EVO 250GB — `S2CJNXAG514758J` (`…-part3`) |
 | Disk B | Samsung 860 EVO 500GB — `S3Z2NB0KA29651E` (`…-part3`) |
 | ESPs | `A0B2-D849` (250GB), `041E-0F11` (500GB) |
-| `tank` | RAIDZ1 HDDs — oCIS data VDisk (`vm-101` scsi1 ~3 TB) |
+| `tank` | RAIDZ1 HDDs — Seafile data VDisk (`vm-101` scsi1 ~3 TB), guest `/mnt/data` |
+| Seafile layout | blocks + SQL dumps on `tank`; **live MariaDB on the SSD OS disk** (`/opt/seafile-mysql/db`) for commit latency |
 | Other | ~120GB Crucial — planned local backup target later |
 
 ## Recovery notes (learned the hard way)
@@ -106,17 +107,22 @@ LAN: `vtnet1` → `vmbr0` / `nic2`.
 - [x] Smart 3 modem mode + OPNsense as edge router
 - [x] Host RAM 32 GB installed (Phase 1 hardware complete)
 - [x] DMZ + HAProxy SNI + oCIS public (`cloud.dustinwalker.de`); Tika on, Collabora off; Tika search smoke-tested
+- [x] **oCIS → Seafile 13 CE** on VM 101 (2026-08-17): Caddy replaced Traefik, production LE first try, nightly SQL dumps armed. Ingress, DNS and HAProxy untouched. Accepted loss: **no full-text content search** (CE limitation). Record: [`homelab-components/seafile/cutover-from-ocis.md`](homelab-components/seafile/cutover-from-ocis.md)
 
-### Open to-do (post–public oCIS)
+### Open to-do (post–Seafile cutover)
 
-Detail + order: [`homelab-components/ocis/README.md`](homelab-components/ocis/README.md) §7.
+Detail + order: [`homelab-components/seafile/README.md`](homelab-components/seafile/README.md) §7.
 
+- [ ] Verify Seafile upload/download round-trip + reboot test on VM 101
+- [ ] Default quota 500 GB; friend accounts; self-registration off
 - [ ] DMZ firewall harden (drop TEMP `DMZ → any`; block DMZ → LAN)
-- [ ] Point clients at `https://cloud.dustinwalker.de`
-- [ ] oCIS SMTP (Zoho / notifications)
+- [ ] Point clients at `https://cloud.dustinwalker.de` (Seafile clients; remove oCIS ones)
+- [ ] Seafile SMTP via `seahub_settings.py` (Zoho) — no SMTP env vars exist
 - [ ] Fresh OPNsense XML backup (private)
-- [ ] Kopia offsite → friend’s TrueNAS (oCIS live path; Seafile idea notes in [`homelab-components/seafile/`](homelab-components/seafile/))
-- [ ] Local ZFS snapshots (sanoid) for oCIS data disk
+- [ ] Kopia offsite → friend’s TrueNAS (`/mnt/data/seafile`: blocks **and** `backup-sql/`)
+- [ ] First restore drill on a disposable VM
+- [ ] Local ZFS snapshots (sanoid) for the VM 101 data disk
+- [x] Nightly Seafile SQL dumps (`seafile-backup-sql.timer`, 03:15, 14-day retention)
 - [x] Scrutiny hub LXC 102 + host collector + **15‑min timer** (temps/history) — [`homelab-components/scrutiny/`](homelab-components/scrutiny/)
 - [ ] Scrutiny email alerts (Zoho / shoutrrr)
 - [ ] DynDNS for Netlify `cloud` A record

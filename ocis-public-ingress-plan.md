@@ -1,8 +1,17 @@
-# oCIS public ingress plan (DMZ + HAProxy SNI + Traefik)
+# Public ingress plan (DMZ + HAProxy SNI + reverse proxy in the VM)
 
-**Status:** Ready to execute (DMZ networking already done)  
-**Last updated:** 2026-08-16  
+**Status:** **Executed** 2026-08-16; still accurate  
+**Last updated:** 2026-08-17  
 **Supersedes:** ad-hoc “terminate TLS on OPNsense” shortcut; aligns with `homeserver-plan.md` §5.
+
+> **Read “Traefik” as “the VM's reverse proxy” throughout.** Written for oCIS,
+> which used Traefik. Since 2026-08-17 the VM runs Seafile with **Caddy**
+> instead, and the swap required **no change** to DNS, HAProxy, the WAN rules,
+> or the split-DNS override — the LE HTTP-01 challenge validated through this
+> exact path on the first attempt. Everything here about SNI passthrough,
+> keeping WAN `:80` open for renewals, TCP-mode health checks, and moving the
+> OPNsense GUI off 443 is unchanged and still load-bearing.
+> Current stack: [`homelab-components/seafile/README.md`](homelab-components/seafile/README.md).
 
 ---
 
