@@ -199,14 +199,14 @@ Carried over from the oCIS build; host-wide items also tracked in [`../../memory
 - [ ] **Verify upload + download round-trip** and re-test on mobile data *and* Wi-Fi (split DNS)
 - [ ] **Reboot test** VM 101 — `ip route` shows `default via 10.10.10.1`, no `169.254`, all four containers return, cert persists
 - [ ] **Set default quota 500 GB**, create friend accounts, confirm self-registration disabled
-- [ ] **DMZ firewall harden** — drop TEMP `DMZ → any`; allow only DNS, HTTP/HTTPS, NTP outbound; **block DMZ → LAN**
+- [x] **DMZ firewall hardened 2026-08-18** — 8 ordered rules; `DMZ → LAN` and `DMZ → This Firewall` blocked + logged; TEMP allow-any disabled (not deleted). See [`../opnsense/README.md`](../opnsense/README.md) §6
 - [ ] **Clients** — Seafile desktop/mobile against `https://cloud.dustinwalker.de`; remove oCIS clients and their old sync folders
 - [x] **SMTP live 2026-08-18** — verified end-to-end via the Forgot-Password flow
 - [ ] Switch to a **dedicated Zoho app-specific password** (currently the shared mailbox password)
 - [x] SPF + DKIM verified 2026-08-18 — `include:zoho.eu`; DKIM selector **`zmail`** (not `zoho`)
 - [ ] **DMARC** absent — optional, `v=DMARC1; p=none;` to start
 - [ ] **Send-quota isolation** — Seafile shares the ZFS-alert mailbox quota via the `cloud@` alias; a share-mail burst must not starve HDD failure alerts. Own mailbox and/or longer `[SEAHUB EMAIL] interval`
-- [ ] **DMZ egress TCP 465** must be on the hardening allow-list or email dies silently
+- [x] **DMZ egress TCP 465** on the allow-list (rule 7) — verified with a TLS handshake to `smtp.zoho.eu:465` from the guest after hardening
 - [ ] **Fresh OPNsense XML backup** (keep private; do not commit)
 
 ### Backups & host health
@@ -216,7 +216,7 @@ Carried over from the oCIS build; host-wide items also tracked in [`../../memory
 - [ ] **First restore drill** on a disposable VM ([`disaster-restore.md`](disaster-restore.md))
 - [ ] **Local ZFS snapshots** (sanoid) for the VM 101 data disk
 - [ ] **DynDNS** — automate the Netlify `cloud` A record
-- [x] Drive temps / history — Scrutiny LXC 102 ([`../scrutiny/`](../scrutiny/)); email alerts still open there
+- [x] Drive temps / history — Scrutiny LXC 102 ([`../scrutiny/`](../scrutiny/)) is dashboard-only; **temperature alerting** lives on the host ([`../proxmox-host/configs/drive-temp-alert.sh`](../proxmox-host/configs/drive-temp-alert.sh), 2026-08-22)
 
 ### Later / optional
 

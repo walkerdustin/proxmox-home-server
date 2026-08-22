@@ -26,6 +26,8 @@ Working notes for the Proxmox home-server build. Update as hardware/network fact
 | House LAN subnet | `192.168.1.0/24` |
 | OPNsense LAN | `192.168.1.1/24` (DHCP server on) |
 | DHCP pool | `192.168.1.100`–`192.168.1.200` |
+| LAN DNS | Unbound on `192.168.1.1`, **forwarding** to `1.1.1.3` / `1.0.0.3` (Cloudflare malware + adult filter) with **Forward first** |
+| Static IP bands | `.1`–`.29` infra · `.30`–`.59` IoT reservations · `.100`–`.200` DHCP pool |
 | Proxmox management | `https://192.168.1.10:8006` |
 | OPNsense GUI | `https://192.168.1.1:8443` (LAN only; port moved for HAProxy) |
 | Wi‑Fi | UniFi U7 on PoE switch behind OPNsense (Smart 3 Wi‑Fi off) |
@@ -118,21 +120,33 @@ Detail + order: [`homelab-components/seafile/README.md`](homelab-components/seaf
 - [x] VM 101 renamed `ocis` → `seafile` (2026-08-18); ext4 label stays `ocis-data` (historical)
 - [x] `docker.service` drop-in `RequiresMountsFor=/mnt/data` — blocks containers initializing into an unmounted bind path (`nofail` in fstab would otherwise boot silently without tank)
 - [ ] Default quota 500 GB; friend accounts; self-registration off
-- [ ] DMZ firewall harden (drop TEMP `DMZ → any`; block DMZ → LAN)
+- [x] **DMZ firewall hardened 2026-08-18** — 8 ordered rules on the DMZ interface; DNS restricted to `DMZ address` only (so OPNsense sees every lookup the DMZ makes), `DMZ → LAN net` and `DMZ → This Firewall` blocked **with logging**, egress limited to 53/123/80/443/465 + ICMP. TEMP allow-any **disabled, not deleted** — one-click revert. Rules: [`homelab-components/opnsense/README.md`](homelab-components/opnsense/README.md) §6
+- [ ] Delete the disabled `TEMP allow DMZ outbound` rule once the hardened set has run ~a week (from 2026-08-18)
+- [ ] When seeding Kopia over the LAN, add an explicit pass rule **above** the `DMZ → LAN` block, then remove it again
 - [ ] Point clients at `https://cloud.dustinwalker.de` (Seafile clients; remove oCIS ones)
 - [x] Seafile SMTP live 2026-08-18 via `seahub_settings.py` (Zoho EU 465 SSL, from `cloud@` alias) — no SMTP env vars exist; verified with Forgot-Password
 - [ ] Fresh OPNsense XML backup (private)
-- [ ] Kopia offsite → friend’s TrueNAS (`/mnt/data/seafile`: blocks **and** `backup-sql/`)
+- [ ] Kopia offsite → friend’s TrueNAS (`/mnt/data/seafile`: blocks **and** `backup-sql/`). Note: `DMZ → LAN` is now blocked, so a LAN-side seed needs a temporary pass rule above that block
 - [ ] First restore drill on a disposable VM
 - [ ] Local ZFS snapshots (sanoid) for the VM 101 data disk
 - [x] Nightly Seafile SQL dumps (`seafile-backup-sql.timer`, 03:15, 14-day retention)
 - [x] Scrutiny hub LXC 102 + host collector + **15‑min timer** (temps/history) — [`homelab-components/scrutiny/`](homelab-components/scrutiny/)
-- [ ] Scrutiny email alerts (Zoho / shoutrrr)
+- [x] **Drive temperature alert 2026-08-22** — `/usr/local/sbin/drive-temp-alert.sh` + `/etc/cron.d/drive-temp-alert`, every 20 min, HTML email listing **all six** drives. Thresholds at **40 °C temporarily** for validation (long-term HDD 45 / SSD 50). Temperature lives under attribute **194** on the Crucial + Seagates but **190** on the Samsungs — checking only one silently misses half the disks. `smartctl` exits non-zero on healthy drives (bitmask), so every call needs `|| true`
+- [ ] **Silent SQL dump failure** — if `seafile-backup-sql.service` starts failing, nothing tells you; you would find out during a restore. Fix with a systemd `OnFailure=` unit that mails, or a staleness check on `/mnt/data/seafile/backup-sql/` folded into one of the host alert scripts
+- [ ] **Remaining SMART gap** — nothing alerts on reallocated/pending sector growth or failed self-tests. Those predict failure better than temperature. Either extend `drive-temp-alert.sh` or wire up Scrutiny's shoutrrr
+- [x] **LAN DNS filtering 2026-08-22** — Unbound switched from recursive to **forwarding** to `1.1.1.3`/`1.0.0.3` (Cloudflare malware + adult filter), *Forward first* on, prefetch on, caches `64m`/`128m`. Key trap: Unbound is recursive by default, so System → Settings → General DNS servers alone change **nothing** for clients — forwarding must be enabled explicitly, and "Use System Nameservers" no longer exists (explicit entries with empty `Domain` instead). Blocked + DNSSEC-signed names return **SERVFAIL** rather than `0.0.0.0`; both block. Cloudflare's `adult.testcategory.com` test domain is **stale** — it answered normally while filtering worked. Docs: [`homelab-components/opnsense/README.md`](homelab-components/opnsense/README.md) §3.1
+- [ ] **DNS filter health check** — `Forward first` means Unbound silently falls back to *unfiltered* recursion if Cloudflare is unreachable, with no error anywhere. Build a cron on `pve` that resolves a known-blocked name via `192.168.1.1` and mails when the sentinel stops coming back (same shape as `drive-temp-alert.sh`, shared cred file)
+- [x] **ESP32 desk light reservation 2026-08-22** — `esp32-6ADCB0` pinned to `192.168.1.30`. An Android *Automate* flow hits `http://<ip>/alarm` at alarm time for a sunrise fade, so a lease change breaks the morning alarm **silently**. Reservations are created from the `+` in the leases list (pre-fills MAC), and **must go into whichever of Kea / Dnsmasq is actually active** — the inactive one accepts the entry and does nothing
+- [ ] **IoT VLAN** — two Shelly Gen3 plugs, the ESP32, a Tuya/Danfoss gateway and an Amazon device all sit on the trusted LAN alongside Proxmox management. Same shape of work as the DMZ (§6), and the `.30`–`.59` band already groups them
+- [ ] Decide whether to add the LAN → `127.0.0.1:53` DNS redirect (Firewall → NAT → **Destination NAT**). Declined 2026-08-22 for simplicity — rationale, and the reason **not** to block port 853, are in [`homelab-components/opnsense/README.md`](homelab-components/opnsense/README.md) §3.2
 - [ ] **DMARC** TXT for `dustinwalker.de` — start `v=DMARC1; p=none;` (SPF + DKIM selector `zmail` already live, verified 2026-08-18)
 - [ ] **Zoho send quota is shared** — Seafile sends via the `cloud@` *alias* on `zfs.notification@`, so both draw on one per-user quota. A burst of share mails can starve **HDD/ZFS failure alerts**. Fix: give Seafile its own mailbox (Zoho limits are per-user), and/or raise `[SEAHUB EMAIL] interval`
 - [ ] Tune Seafile digest `interval` in `seafevents.conf` (default `30m` → `4h`); no rate-limit option exists there
 - [ ] DynDNS for Netlify `cloud` A record
 - [x] **Pool capacity alert on `pve`** — done 2026-08-18. `/usr/local/sbin/zfs-capacity-alert.sh` + `/etc/cron.d/zfs-capacity-alert`, hourly at :25, curl → Zoho directly. Note: postfix **is** installed on `pve` (earlier notes said otherwise), so `mail -s .. root` → `proxmox-mail-forward` → PVE notifications would also work — curl is used on purpose so a capacity warning does not share a failure domain with every other alert. Two triggers, because `zpool list` and `zfs list` disagree by design here: allocation ≥ 85% **or** root-dataset `AVAIL` below floor (`tank` 40G, `rpool` 30G). Observed 2026-08-18: `tank` = 10% / 4.88T free per `zpool list` but only **166G** AVAIL per `zfs list` — a %-only alert would never fire. Docs: [`homelab-components/proxmox-host/README.md`](homelab-components/proxmox-host/README.md) §3
+- [x] **Drive-health alert validated 2026-08-22** — and it was **broken**: `/etc/aliases.db` was missing, so postfix deferred all mail-to-root and **ZED notifications never arrived**, while the `zoho-smtp` target's **Test button passed the whole time** (different transport). Fixed with `newaliases` + `postqueue -f`; the Aug 18 scrub mail was delivered 3.7 days late. `ZED_NOTIFY_VERBOSE=1` now makes the weekly Sunday scrub a heartbeat for the entire chain. `zinject` is not shipped by Proxmox, so a scrub is the zero-risk test — no disk unplugging needed
+- [x] First real scrub of the Seafile data 2026-08-18: **0 errors** on all three drives in 20 min (the Aug 16 scrub took 2s — it ran before the ~500 GB upload, so it verified nothing)
+- [x] DMZ DNS fallback removed 2026-08-22 — `dns-nameservers 10.10.10.1` only, in `/etc/network/interfaces`; applied live via `/run/resolvconf/interface/ens18.inet` + `resolvconf -u` (never `ifdown ens18` — that drops the VM's only path)
 - [ ] **Rotate Zoho SMTP to an app-specific password — one rotation, three consumers.** The same mailbox password is now in three places: Proxmox notifications (`/etc/pve/priv/notifications.cfg`), Seafile (`seahub_settings.py` on VM 101), and `/etc/zfs-capacity-alert.cred` on `pve`. It has also appeared in chat transcripts. Rotate all three together — piecemeal means one gets forgotten and alerts die silently
 - [ ] Decide thick vs thin for `tank/vm-101-disk-0` (`refreservation`) once snapshot usage is non-trivial — see [`homelab-components/proxmox-host/README.md`](homelab-components/proxmox-host/README.md) §3
 - [ ] **Restore drill** — rehearse SQL dump + snapshot restore on a throwaway VM; own docs call it non-negotiable

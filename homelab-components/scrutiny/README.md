@@ -1,7 +1,7 @@
 # Scrutiny (drive SMART / temperature)
 
 **Status:** Live (LAN only)  
-**Last verified:** 2026-08-16 — hub + **systemd timer enabled**; dashboard updating under oCIS sync load  
+**Last verified:** 2026-08-22 — hub + **systemd timer enabled**; dashboard current for all 6 disks  
 **UI:** http://192.168.1.20:8080  
 
 Screenshot (under load, timer live): [`dashboard-2026-08-16.png`](dashboard-2026-08-16.png)
@@ -12,7 +12,22 @@ Screenshot (under load, timer live): [`dashboard-2026-08-16.png`](dashboard-2026
 
 ## 1. Role
 
-Hard-drive health dashboard: SMART status, temperature history, and (planned) email alerts. Does **not** replace Proxmox ZFS pool notifications (`zoho-smtp`); it complements them with per-disk trends.
+Hard-drive health **dashboard**: SMART status and temperature history. Does **not** replace Proxmox
+ZFS pool notifications (`zoho-smtp`); it complements them with per-disk trends.
+
+**Scrutiny does no alerting here, by decision (2026-08-22).** Its shoutrrr notifications were
+never enabled, and temperature alerting is instead done on the host by
+[`../proxmox-host/configs/drive-temp-alert.sh`](../proxmox-host/configs/drive-temp-alert.sh)
+— reading SMART directly with `smartctl` and mailing via `curl`. Rationale: an alert about a
+dying disk must not depend on this container being up, and it keeps one notification transport
+rather than two.
+
+So treat this UI as **trend inspection, not monitoring**. Nothing here will page you.
+
+**Open gap:** no alerting exists on reallocated / pending sector growth or failed self-tests —
+the strongest pre-failure signals, and ones ZFS reports nothing about (`zpool status` stays
+`ONLINE` until an unrecoverable read). Fix by extending `drive-temp-alert.sh` to alert on
+*increase from a stored baseline* for attributes 5, 197 and 198, or by enabling shoutrrr here.
 
 ---
 

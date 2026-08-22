@@ -1,10 +1,66 @@
 # Proxmox host (`pve`)
 
 **Status:** Production  
-**Last verified:** 2026-08-16  
+**Last verified:** 2026-08-22  
 **Management:** https://192.168.1.10:8006  
 
 Working facts: [`../../memory.md`](../../memory.md) · Rebuild networking: [`../../opnsense-rebuild-guide.md`](../../opnsense-rebuild-guide.md)
+
+---
+
+## Schedules (authoritative)
+
+Every recurring job that touches this host or VM 101. All times **Europe/Berlin**.
+If another doc disagrees with this table, this table wins.
+
+| When | Job | Runs on | Defined in |
+|------|-----|---------|------------|
+| every 15 min | `sanoid` evaluates retention — only acts when a policy is actually due | `pve` | `sanoid.timer` (package default) + [`configs/sanoid.conf`](configs/sanoid.conf) |
+| hourly | Snapshot `tank/vm-101-disk-0` (12 kept) | `pve` | sanoid `template_seafiledata` |
+| **03:15** daily | Seafile MariaDB dumps -> `/mnt/data/seafile/backup-sql/`, 14-day retention | **VM 101** | `seafile-backup-sql.timer` (`Persistent=true`) |
+| **04:00** daily | Snapshot `tank/vm-101-disk-0` (7 daily, 2 weekly) | `pve` | sanoid `template_seafiledata` |
+| **04:10** daily | Snapshot `rpool/data/vm-101-disk-1` (7 daily) | `pve` | sanoid `template_vmos` |
+| **:25** hourly | ZFS capacity check, both pools | `pve` | [`configs/cron.d-zfs-capacity-alert`](configs/cron.d-zfs-capacity-alert) |
+| **:00 / :20 / :40** | Drive temperature check, all 6 disks | `pve` | [`configs/cron.d-drive-temp-alert`](configs/cron.d-drive-temp-alert) |
+| *interval unverified* | Scrutiny collector pushes SMART data to LXC 102 | `pve` | systemd timer — check: `systemctl list-timers 'scrutiny*'` |
+| **Sun 03:00** weekly | `zpool scrub tank` | `pve` | `/etc/cron.d/zfs-scrub-tank` |
+| weekly (Mon) | `fstrim` — returns freed guest blocks to ZFS | **VM 101** | `fstrim.timer` (systemd default) |
+| *manual only* | Seafile `seaf-gc.sh` — must **never** overlap a backup or dump | VM 101 | — |
+| *unverified* | `rpool` scrub — Debian's zfsutils cron may or may not be present | `pve` | check: `ls /etc/cron.d/` |
+
+**The 03:15 / 04:00 ordering is deliberate**, not incidental: the guest dumps its databases
+*before* the data zvol is snapshotted, so every daily snapshot contains the block store **and**
+a matching SQL dump = one self-consistent restore set. Do not reorder these.
+
+## Notifications (authoritative)
+
+All mail lands at `mail@dustinwalker.de`. Senders: `zfs.notification@dustinwalker.de` (host)
+and the `cloud@dustinwalker.de` alias (Seafile) -- **both draw on one Zoho per-user quota**.
+
+| Event | Detected by | Transport | State |
+|-------|-------------|-----------|-------|
+| Pool degraded / faulted / checksum errors | ZED | `mail` -> postfix -> `/root/.forward` -> `proxmox-mail-forward` -> `zoho-smtp` | Path proven 2026-08-22. A real DEGRADED event was never staged -- `zinject` is not shipped by Proxmox |
+| **Every scrub finish**, clean or not | ZED, `ZED_NOTIFY_VERBOSE=1` | same as above | **Verified 2026-08-22.** Doubles as a weekly **heartbeat** for this entire chain |
+| Pool nearly full (alloc >= 85%, or `AVAIL` below floor) | `zfs-capacity-alert.sh` | **`curl` straight to `smtp.zoho.eu:465`** -- deliberately independent of postfix and pmxcfs | Verified 2026-08-18 |
+| Proxmox jobs, and Notifications -> **Test** | PVE notification system | PVE's own SMTP client -> Zoho | Working |
+| Anything doing `mail root` (cron, smartd) | postfix | mail-to-root path | Verified 2026-08-22 |
+| Seafile app mail (shares, password reset) | Seahub | `seahub_settings.py` -> `smtp.zoho.eu:465` via `cloud@` alias | Verified 2026-08-18 |
+| **Drive temperature** over ceiling | `drive-temp-alert.sh` | `curl` straight to `smtp.zoho.eu:465` | Verified 2026-08-22. HTML table of **all** drives every mail |
+| **SMART: reallocated / pending sectors, self-test failures** | Scrutiny collects it, nothing alerts on it | — | **GAP** -- growing bad sectors predict failure better than temperature does, and ZFS reports `ONLINE` throughout |
+| **Nightly SQL dump fails** | — | **nothing** | **GAP** -- a failing timer is silent. Needs `OnFailure=` or a check in the capacity script |
+
+**Two transports, and they fail independently.** The Notifications **Test** button uses PVE's
+own SMTP client; ZED uses local `mail`. A passing Test proves nothing about ZED. This is not
+theoretical -- see the `aliases.db` incident in the ZED section below.
+
+```bash
+# is the alert plumbing alive?
+ls -l /etc/aliases.db /usr/libexec/proxmox-mail-forward   # both must exist
+mailq                                                    # must say "Mail queue is empty"
+grep ZED_NOTIFY_VERBOSE /etc/zfs/zed.d/zed.rc            # must be =1
+systemctl list-timers sanoid.timer                       # next run in the future
+stat -c '%y  %n' /var/lib/zfs-capacity-alert/*           # mtimes must advance hourly
+```
 
 ---
 
@@ -87,7 +143,7 @@ Detail: [`../../storage_server_setup.md`](../../storage_server_setup.md)
 
 ### ZFS / pool email alerts (Zoho SMTP)
 
-Set up **2026-08-15** so RAIDZ1/`rpool` problems mail you (degraded pool, scrub errors, etc.) via Proxmox **Datacenter → Notifications**. This is separate from Scrutiny (temps/history UI; Scrutiny email alerts still optional).
+Set up **2026-08-15** so RAIDZ1/`rpool` problems mail you (degraded pool, scrub errors, etc.) via Proxmox **Datacenter → Notifications**. This is separate from Scrutiny, which stays a dashboard/history UI only — its own alerting was never enabled. Temperature alerting is handled instead by [`configs/drive-temp-alert.sh`](configs/drive-temp-alert.sh) (see below).
 
 | Item | Value |
 |------|--------|
@@ -119,6 +175,102 @@ If Test fails with “Temporary failure in name resolution”, fix `/etc/resolv.
 | DKIM | present under selector **`zmail`** (not `zoho`), 1024-bit |
 | DMARC | **absent** — optional; `p=none` would add visibility |
 | Alias | `cloud@dustinwalker.de` on the `zfs.notification` mailbox (Seafile sender; **not** set as mailbox address) |
+
+### Drive temperature alert
+
+Set up **2026-08-22**. Script [`configs/drive-temp-alert.sh`](configs/drive-temp-alert.sh)
+-> `/usr/local/sbin/`, schedule [`configs/cron.d-drive-temp-alert`](configs/cron.d-drive-temp-alert)
+-> `/etc/cron.d/`. Every 20 minutes. Shares `/etc/zfs-capacity-alert.cred` so there is no
+second copy of the password.
+
+**Covers temperature only.** Reallocated/pending sector growth and failed self-tests are still
+unalerted -- see the notifications table.
+
+| Drive | Dev | Type | Idle | Peak recorded |
+|-------|-----|------|------|---------------|
+| ST2000DM001-1ER164 `Z4Z2CNQR` | `sda` | HDD | 36 | **43** |
+| Samsung SSD 860 EVO 500GB | `sdb` | SSD | 28 | – |
+| Crucial CT120BX500SSD1 | `sdc` | SSD | 32 | 41 |
+| Samsung SSD 850 EVO 250GB | `sdd` | SSD | 29 | – |
+| ST2000NM012A `WS109WW8` | `sde` | HDD | 39 | **47** |
+| ST2000NM012A `WS10P9G6` | `sdf` | HDD | 35 | 42 |
+
+Thresholds live at the top of the script: `TEMP_MAX_HDD` / `TEMP_MAX_SSD`, plus an optional
+per-**serial** override map. Keyed on serial and not `/dev/sdX` because device letters can move
+between reboots. **Both are set to 40 temporarily for validation**; sensible long-term values
+are HDD 45 / SSD 50 (`sde` idles at 39, so 40 will trip under any real load -- which is the
+point of the temporary setting).
+
+Non-obvious things this script has to handle:
+
+- **Temperature lives under two different SMART attributes here.** `194 Temperature_Celsius` on
+  the Crucial and both Seagates; `190 Airflow_Temperature_Cel` on both Samsungs. The Seagates
+  report both. A script checking only one attribute silently reports nothing for half the disks.
+  Field 10 is the raw value in either case.
+- **`smartctl` exits non-zero on healthy drives.** It returns a bitmask, and bit 6 ("an
+  attribute is in its old-age range") is set on every drive here. Every call needs `|| true`, or
+  `set -e` kills the script on a perfectly good disk.
+- **`-n standby`** so a sleeping disk is never spun up just to read a temperature. Irrelevant
+  today (no spindown on ZFS members) but free insurance.
+- **Mail is `text/html` with inline styles only.** Plain-text columns were tried first and were
+  unreadable -- mail clients render in a proportional font, so fixed-width alignment collapses.
+  No `<style>` block, no external CSS, no images: clients strip all three.
+
+Rate limiting: mails when the **set** of over-limit drives changes (so a second drive going hot
+escalates at once rather than being swallowed by a reminder window), then every 6 h while it
+persists, then once on recovery. State in `/var/lib/drive-temp-alert/state`.
+
+```bash
+/usr/local/sbin/drive-temp-alert.sh --test    # always mails, ignores thresholds
+/usr/local/sbin/drive-temp-alert.sh; echo "exit=$?"   # exit 1 = something is over limit
+journalctl -t drive-temp-alert --since today
+```
+
+**Deliberately not sharing Scrutiny's collector schedule** (which is a systemd timer, not cron).
+One job hanging off another's schedule means a failure in either kills both, and a change to the
+collector's timer would silently change this alert. Reading Scrutiny's API would also make the alert depend on LXC 102 being up to tell
+you a disk is overheating. SMART attribute reads are cheap, so polling twice costs nothing.
+
+### ZED -> email: the `mail-to-root` path is separate, and it was silently broken
+
+**Verified working 2026-08-22.** Two *different* mail paths exist on this host and they fail
+independently -- this cost days of false confidence:
+
+| Path | Used by | Transport |
+|------|---------|-----------|
+| Notification target direct | Datacenter -> Notifications **Test**, Proxmox backup jobs | PVE's own SMTP client -> Zoho |
+| **mail-to-root** | **ZED** (pool degraded, scrub/checksum errors), cron, smartd | `mail` -> postfix -> `/root/.forward` -> `/usr/libexec/proxmox-mail-forward` -> notification system -> Zoho |
+
+**A passing `zoho-smtp` Test says nothing about whether ZED can reach you.**
+
+The break: **`/etc/aliases.db` did not exist**, so postfix refused to resolve `root` and
+deferred every message with `status=deferred (alias database unavailable)`. Silent -- mail piles
+up in the queue instead of erroring anywhere visible. A real scrub notification from
+2026-08-18 22:40 sat undelivered for **3.7 days** until the fix.
+
+```bash
+newaliases            # compiles /etc/aliases -> /etc/aliases.db; idempotent
+postqueue -f          # retry deferred mail
+mailq                 # must be empty
+```
+
+Health check (all three must hold):
+
+```bash
+ls -l /etc/aliases.db                        # must exist
+ls -l /usr/libexec/proxmox-mail-forward      # note: NOT /usr/libexec/proxmox/...
+mailq                                        # "Mail queue is empty"
+```
+
+**`ZED_NOTIFY_VERBOSE=1`** is set in `/etc/zfs/zed.d/zed.rc` on purpose (backup at
+`/root/zed.rc.bak-2026-08-18`). Default is off, which mails only on *errors* -- so a clean
+weekly scrub would send nothing and silence would be ambiguous. With it on, the Sunday scrub
+emails every week and becomes a **heartbeat for the whole alert chain**: as long as it keeps
+arriving, ZED, postfix, the forwarder, the matcher and Zoho are all alive.
+
+Note `zinject` is **not** shipped by Proxmox's `zfsutils-linux`, so faults cannot be simulated
+that way. A scrub with verbose notifications on is the zero-risk substitute -- no need to
+unplug a disk.
 
 ### Local ZFS snapshots (sanoid)
 
