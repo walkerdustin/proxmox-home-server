@@ -113,11 +113,14 @@ LAN: `vtnet1` → `vmbr0` / `nic2`.
 
 Detail + order: [`homelab-components/seafile/README.md`](homelab-components/seafile/README.md) §7.
 
-- [ ] Verify Seafile upload/download round-trip + reboot test on VM 101
+- [x] Seafile upload/download verified in bulk (~500 GB uploaded by 2026-08-18)
+- [x] Reboot test on VM 101 passed 2026-08-18 (route clean, `/mnt/data` mounted, containers + certs returned)
+- [x] VM 101 renamed `ocis` → `seafile` (2026-08-18); ext4 label stays `ocis-data` (historical)
+- [x] `docker.service` drop-in `RequiresMountsFor=/mnt/data` — blocks containers initializing into an unmounted bind path (`nofail` in fstab would otherwise boot silently without tank)
 - [ ] Default quota 500 GB; friend accounts; self-registration off
 - [ ] DMZ firewall harden (drop TEMP `DMZ → any`; block DMZ → LAN)
 - [ ] Point clients at `https://cloud.dustinwalker.de` (Seafile clients; remove oCIS ones)
-- [ ] Seafile SMTP via `seahub_settings.py` (Zoho) — no SMTP env vars exist
+- [x] Seafile SMTP live 2026-08-18 via `seahub_settings.py` (Zoho EU 465 SSL, from `cloud@` alias) — no SMTP env vars exist; verified with Forgot-Password
 - [ ] Fresh OPNsense XML backup (private)
 - [ ] Kopia offsite → friend’s TrueNAS (`/mnt/data/seafile`: blocks **and** `backup-sql/`)
 - [ ] First restore drill on a disposable VM
@@ -125,7 +128,14 @@ Detail + order: [`homelab-components/seafile/README.md`](homelab-components/seaf
 - [x] Nightly Seafile SQL dumps (`seafile-backup-sql.timer`, 03:15, 14-day retention)
 - [x] Scrutiny hub LXC 102 + host collector + **15‑min timer** (temps/history) — [`homelab-components/scrutiny/`](homelab-components/scrutiny/)
 - [ ] Scrutiny email alerts (Zoho / shoutrrr)
+- [ ] **DMARC** TXT for `dustinwalker.de` — start `v=DMARC1; p=none;` (SPF + DKIM selector `zmail` already live, verified 2026-08-18)
+- [ ] **Zoho send quota is shared** — Seafile sends via the `cloud@` *alias* on `zfs.notification@`, so both draw on one per-user quota. A burst of share mails can starve **HDD/ZFS failure alerts**. Fix: give Seafile its own mailbox (Zoho limits are per-user), and/or raise `[SEAHUB EMAIL] interval`
+- [ ] Tune Seafile digest `interval` in `seafevents.conf` (default `30m` → `4h`); no rate-limit option exists there
 - [ ] DynDNS for Netlify `cloud` A record
+- [x] **Pool capacity alert on `pve`** — done 2026-08-18. `/usr/local/sbin/zfs-capacity-alert.sh` + `/etc/cron.d/zfs-capacity-alert`, hourly at :25, curl → Zoho directly. Note: postfix **is** installed on `pve` (earlier notes said otherwise), so `mail -s .. root` → `proxmox-mail-forward` → PVE notifications would also work — curl is used on purpose so a capacity warning does not share a failure domain with every other alert. Two triggers, because `zpool list` and `zfs list` disagree by design here: allocation ≥ 85% **or** root-dataset `AVAIL` below floor (`tank` 40G, `rpool` 30G). Observed 2026-08-18: `tank` = 10% / 4.88T free per `zpool list` but only **166G** AVAIL per `zfs list` — a %-only alert would never fire. Docs: [`homelab-components/proxmox-host/README.md`](homelab-components/proxmox-host/README.md) §3
+- [ ] **Rotate Zoho SMTP to an app-specific password — one rotation, three consumers.** The same mailbox password is now in three places: Proxmox notifications (`/etc/pve/priv/notifications.cfg`), Seafile (`seahub_settings.py` on VM 101), and `/etc/zfs-capacity-alert.cred` on `pve`. It has also appeared in chat transcripts. Rotate all three together — piecemeal means one gets forgotten and alerts die silently
+- [ ] Decide thick vs thin for `tank/vm-101-disk-0` (`refreservation`) once snapshot usage is non-trivial — see [`homelab-components/proxmox-host/README.md`](homelab-components/proxmox-host/README.md) §3
+- [ ] **Restore drill** — rehearse SQL dump + snapshot restore on a throwaway VM; own docs call it non-negotiable
 - [ ] ZFS ARC ~4 GB cap if needed under load
 - [ ] Crucial SSD as local backup target
 - [ ] Dockploy — see [`homelab-components/dockploy/`](homelab-components/dockploy/)

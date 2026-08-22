@@ -10,7 +10,7 @@ Working facts: [`../../memory.md`](../../memory.md) · Rebuild networking: [`../
 
 ## 1. Role
 
-Hypervisor for the homelab: bridges for WAN/LAN/emergency/DMZ, ZFS storage, and VMs (OPNsense, oCIS, later Dockploy).
+Hypervisor for the homelab: bridges for WAN/LAN/emergency/DMZ, ZFS storage, and VMs (OPNsense, Seafile, later Dockploy).
 
 ---
 
@@ -52,7 +52,7 @@ Emergency laptop: static `10.99.99.2/24`, no gateway → `https://10.99.99.1:800
 | Pool | Topology | Use |
 |------|----------|-----|
 | `rpool` | ZFS mirror | OS, VM OS disks |
-| `tank` | RAIDZ1 (3× ~2 TB HDD) | Large data VDisks (oCIS `scsi1` ~3 TB) |
+| `tank` | RAIDZ1 (3× ~2 TB HDD) | Large data VDisks (VM 101 `scsi1` ~3 TB, guest `/mnt/data`) |
 
 **`rpool` disks**
 
@@ -63,6 +63,16 @@ Emergency laptop: static `10.99.99.2/24`, no gateway → `https://10.99.99.1:800
 | ESPs | `A0B2-D849`, `041E-0F11` | both bootable |
 
 Also present: ~120 GB Crucial (planned local backup target later).
+
+**VM 101 zvols — do not confuse the two `vm-101-disk-0` names:**
+
+| Dataset | Role |
+|---------|------|
+| `rpool/data/vm-101-disk-0` | **EFI disk** (`efidisk0`, 1M) — tiny, looks orphaned, **destroying it breaks UEFI boot** |
+| `rpool/data/vm-101-disk-1` | OS disk `scsi0` (32G) — also holds the live MariaDB |
+| `tank/vm-101-disk-0` | Data disk `scsi1` (3000 GiB, thick) — `/mnt/data` in the guest |
+
+`qm config 101` filtered on `scsi|virtio|sata|ide` hides `efidisk0`; always grep `/etc/pve/nodes/pve/qemu-server/101.conf` before destroying any zvol.
 
 **Drive SMART / temps:** Scrutiny hub–spoke — [`../scrutiny/`](../scrutiny/) (LXC 102 + host collector). Scrutiny is **not** the ZFS email path below.
 
@@ -87,7 +97,7 @@ Set up **2026-08-15** so RAIDZ1/`rpool` problems mail you (degraded pool, scrub 
 | Auth user / From | `zfs.notification@dustinwalker.de` |
 | Password | Zoho mailbox password or **App Password** (if 2FA) — not in git |
 | Additional recipient | `mail@dustinwalker.de` |
-| Matcher | Default matcher includes **`zoho-smtp`**; **`mail-to-root`** left off (no local MTA) |
+| Matcher | `default-matcher`, `mode all` -> target **`zoho-smtp`**. The `mail-to-root` *endpoint* exists but is **not** a matcher target |
 
 **DNS on host (required for SMTP):** resolvers must reach Zoho. Under `vmbr0`:
 
@@ -99,6 +109,101 @@ dns-search local
 If Test fails with “Temporary failure in name resolution”, fix `/etc/resolv.conf` / those lines first.
 
 **Verify:** Datacenter → Notifications → `zoho-smtp` → **Test** → mail arrives at `mail@dustinwalker.de`.
+
+**Domain email records** (verified 2026-08-18, authoritative DNS at Netlify) — shared by Proxmox alerts and Seafile:
+
+| Record | Value / state |
+|--------|----------------|
+| MX | `mx.zoho.eu` (10), `mx2` (20), `mx3` (50) |
+| SPF | `v=spf1 include:zoho.eu ~all` — matches the EU DC / `smtp.zoho.eu` |
+| DKIM | present under selector **`zmail`** (not `zoho`), 1024-bit |
+| DMARC | **absent** — optional; `p=none` would add visibility |
+| Alias | `cloud@dustinwalker.de` on the `zfs.notification` mailbox (Seafile sender; **not** set as mailbox address) |
+
+### Local ZFS snapshots (sanoid)
+
+Set up **2026-08-18**. Package `sanoid` 2.2.0 from trixie/main; config committed at
+[`configs/sanoid.conf`](configs/sanoid.conf) → `/etc/sanoid/sanoid.conf`.
+The Debian package ships **no** default config — without the file sanoid aborts with
+`cannot load /etc/sanoid/sanoid.conf`.
+
+| Dataset | Retention |
+|---------|-----------|
+| `tank/vm-101-disk-0` (Seafile blocks + SQL dumps) | 12 hourly, 7 daily, 2 weekly |
+| `rpool/data/vm-101-disk-1` (VM 101 OS + live MariaDB) | 7 daily |
+
+`daily_hour = 4` is deliberate: the guest dumps its databases at 03:15, so each daily
+snapshot contains block store **and** a fresh SQL dump = one consistent restore set.
+
+Snapshots protect against deleted libraries / bad `rm` / ransomware / failed upgrades.
+They do **not** protect against pool or site loss — Kopia offsite is still required.
+`autoprune` only touches sanoid's own `autosnap_*` names; `qm snapshot` snapshots are safe.
+
+```bash
+systemctl list-timers sanoid.timer
+zfs list -t snapshot
+zfs list -o name,used,avail,refer,usedbysnapshots tank tank/vm-101-disk-0
+```
+
+**Stale VM snapshots are a hazard once real data exists** — `before-ocis-full-server` and
+`before-seafile-cutover` predated Seafile, so rolling back would have destroyed live data
+while protecting nothing. Both deleted 2026-08-18; the cutover one alone was pinning **179G**.
+
+### Space accounting gotcha (thick zvol on RAIDZ)
+
+`tank/vm-101-disk-0` was created **thick** (`refreservation` ≈ 2.98T of ~3.53T usable), so
+pool `AVAIL` is mostly reservation, not free space. Counter-intuitive consequence: **freeing
+data inside the guest lowers `AVAIL`**, because unwritten reserved space is charged at
+worst-case RAIDZ parity inflation while written data costs less. Observed 2026-08-18:
+`REFER` 571G→390G while `AVAIL` 377G→**166G**.
+
+Snapshots are not the problem (`USEDSNAP` was 714K). If snapshot headroom gets tight, the
+lever is the reservation:
+
+```bash
+zfs set refreservation=none tank/vm-101-disk-0   # thin; reversible
+```
+
+Trade-off: removes the guarantee that the guest can always write its full 2.93T, so pool
+capacity must be monitored. Also tick **Thin provision** on the `tank` storage in
+Datacenter → Storage so future disks are sparse.
+
+### Pool capacity alert (cron + curl -> Zoho)
+
+Set up **2026-08-18**. Script [`configs/zfs-capacity-alert.sh`](configs/zfs-capacity-alert.sh)
+-> `/usr/local/sbin/`, schedule [`configs/cron.d-zfs-capacity-alert`](configs/cron.d-zfs-capacity-alert)
+-> `/etc/cron.d/`. Runs hourly at :25.
+
+**Why a script and not a Proxmox notification:** ZED and Datacenter -> Notifications cover pool
+*health* (degraded vdev, scrub/checksum errors). Neither emits any event for a pool that is
+merely **filling up**, and Proxmox's notification targets cannot be invoked from a script with
+an arbitrary message.
+
+**Why `curl` and not `mail -s ... root`:** postfix *is* installed on this host (corrected
+2026-08-18 -- earlier notes here wrongly said "no local MTA"), so the mail-to-root path is
+available and would avoid a second copy of the SMTP password. It is deliberately **not** used:
+that path depends on postfix + `/root/.forward` + `proxmox-mail-forward` + pmxcfs, and a
+capacity warning should not share a single point of failure with every other alert. Cost of the
+choice is the duplicated credential, tracked in the rotation to-do in `../../memory.md`.
+
+Two independent triggers, because on this host the two numbers disagree:
+
+| Trigger | Threshold | What it catches |
+|---------|-----------|-----------------|
+| `zpool list` allocation | >= **85%** | Genuine fill-up + the ~80% fragmentation cliff. Counts allocated blocks only, so it **ignores reservations** -- `tank` reads ~11% |
+| Root dataset `AVAIL` | `tank` < **40G**, `rpool` < **30G** | Snapshot headroom. Accounts for `refreservation`, so tank's ~166G AVAIL *is* all the room the thick zvol leaves for snapshot divergence |
+
+Mails on entry into alert, again every 24 h while it persists, and once on recovery.
+State in `/var/lib/zfs-capacity-alert/<pool>`; delete a file to re-arm.
+
+Credentials in **`/etc/zfs-capacity-alert.cred`** (mode `600`, curl config format, **not in git**);
+passed with `--config` rather than `--user` so the password never appears in `ps`.
+
+```bash
+/usr/local/sbin/zfs-capacity-alert.sh --test    # always mails, ignores thresholds
+/usr/local/sbin/zfs-capacity-alert.sh; echo "exit=$?"   # exit 1 = a pool is in alert
+journalctl -t zfs-capacity-alert --since today
+```
 
 **Weekly `tank` scrub** (errors surface via ZED/Proxmox notifications):
 
@@ -116,7 +221,7 @@ If Test fails with “Temporary failure in name resolution”, fix `/etc/resolv.
 | VMID | Name | Role | Status |
 |------|------|------|--------|
 | 100 | `opnsense` | Edge router / firewall / HAProxy | Live — [`../opnsense/`](../opnsense/) |
-| 101 | `ocis` | File cloud | Live — [`../ocis/`](../ocis/) |
+| 101 | `seafile` (renamed from `ocis` 2026-08-18) | File cloud — Seafile 13 CE | Live — [`../seafile/`](../seafile/) |
 | 102 | `scrutiny` | SMART / temp hub (LXC) | Live — [`../scrutiny/`](../scrutiny/) |
 | *(later)* | Dockploy | Public apps | Planned — [`../dockploy/`](../dockploy/) |
 

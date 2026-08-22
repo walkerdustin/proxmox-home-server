@@ -1,0 +1,14 @@
+# /etc/cron.d/zfs-capacity-alert  --  Proxmox host `pve`
+#
+# Hourly at :25 -- deliberately clear of sanoid (:00/:04) and the Sunday
+# scrub (03:00). Output goes to the journal, because this host has no local
+# MTA and cron's own failure mail would be silently dropped:
+#
+#   journalctl -t zfs-capacity-alert --since today
+#
+# The script exits 1 while a pool is in alert state, which is expected and
+# not a failure -- it is only there so an interactive run has a useful status.
+
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+25 * * * * root /usr/local/sbin/zfs-capacity-alert.sh 2>&1 | logger -t zfs-capacity-alert

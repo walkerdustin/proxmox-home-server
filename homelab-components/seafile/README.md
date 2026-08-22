@@ -21,7 +21,7 @@ Replaced oCIS on 2026-08-17. The driver was admin visibility: Seafile ships a pe
 
 | Item | Value |
 |------|--------|
-| Proxmox VM | **101** — name and guest hostname still `ocis` (cosmetic only; not referenced by DNS or any cert) |
+| Proxmox VM | **101** `seafile` (renamed from `ocis` 2026-08-18; disk label stays `ocis-data` — historical, mounted by label in `/etc/fstab`) |
 | OS | Debian (headless) |
 | vCPU / RAM | 2 / 6 GB |
 | OS disk | `scsi0` on `local-zfs` (~32G) — also holds the live MariaDB |
@@ -79,7 +79,7 @@ Verified on 2026-08-17: the HTTP-01 challenge was served to `10.10.10.1` (OPNsen
 | SeaDoc | **off** (`ENABLE_SEADOC=false`; `seadoc.yml` not downloaded) |
 | Notification server | **off** |
 | Seafile AI / face recognition | **off** |
-| SMTP | not configured yet |
+| SMTP | **live 2026-08-18** — Zoho EU `smtp.zoho.eu`:465 SSL; auth `zfs.notification@dustinwalker.de`; from `Dustins Seafile Cloud <cloud@dustinwalker.de>` (alias). Password in `seahub_settings.py` only |
 | Admin user | `mail@dustinwalker.de` (password only in server `.env`, not in git) |
 
 Two settings that are load-bearing and easy to get wrong:
@@ -201,7 +201,12 @@ Carried over from the oCIS build; host-wide items also tracked in [`../../memory
 - [ ] **Set default quota 500 GB**, create friend accounts, confirm self-registration disabled
 - [ ] **DMZ firewall harden** — drop TEMP `DMZ → any`; allow only DNS, HTTP/HTTPS, NTP outbound; **block DMZ → LAN**
 - [ ] **Clients** — Seafile desktop/mobile against `https://cloud.dustinwalker.de`; remove oCIS clients and their old sync folders
-- [ ] **SMTP** via `seahub_settings.py` (Zoho) so share/reset mails work
+- [x] **SMTP live 2026-08-18** — verified end-to-end via the Forgot-Password flow
+- [ ] Switch to a **dedicated Zoho app-specific password** (currently the shared mailbox password)
+- [x] SPF + DKIM verified 2026-08-18 — `include:zoho.eu`; DKIM selector **`zmail`** (not `zoho`)
+- [ ] **DMARC** absent — optional, `v=DMARC1; p=none;` to start
+- [ ] **Send-quota isolation** — Seafile shares the ZFS-alert mailbox quota via the `cloud@` alias; a share-mail burst must not starve HDD failure alerts. Own mailbox and/or longer `[SEAHUB EMAIL] interval`
+- [ ] **DMZ egress TCP 465** must be on the hardening allow-list or email dies silently
 - [ ] **Fresh OPNsense XML backup** (keep private; do not commit)
 
 ### Backups & host health
@@ -216,7 +221,7 @@ Carried over from the oCIS build; host-wide items also tracked in [`../../memory
 ### Later / optional
 
 - [ ] Pin an exact Seafile patch tag
-- [ ] Rename VM + guest hostname `ocis` → `seafile` (cosmetic)
+- [x] Renamed VM + guest hostname `ocis` → `seafile` (2026-08-18)
 - [ ] Cap ZFS ARC ~4 GB once the HDD pool is under load
 - [ ] Local backup target on the Crucial SSD (Proxmox backup of the OS disk)
 - [ ] Reconsider SeaDoc if in-browser markdown editing is ever wanted

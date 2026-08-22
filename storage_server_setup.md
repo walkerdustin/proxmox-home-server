@@ -11,7 +11,7 @@ The goal of this VM is to provide a private cloud and backup storage for the adm
 > block storage was the very objection this switch had to answer.
 > As-built: [`homelab-components/seafile/README.md`](homelab-components/seafile/README.md).
 
-## 2. Virtual Machine Specifications (VM 101, guest hostname still `ocis`)
+## 2. Virtual Machine Specifications (VM 101 `seafile`)
 *   **OS:** Debian Linux (headless).
 *   **Resources:** 6 GB RAM, 2 vCPU.
 *   **Network:** DMZ bridge `vmbr3` — static `10.10.10.10/24`, gateway OPNsense DMZ `10.10.10.1` (not LAN).
