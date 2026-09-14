@@ -1,0 +1,10 @@
+# /etc/cron.d/zfs-scrub-tank  --  Proxmox host `pve`
+#
+# Weekly tank scrub, Sundays 03:00 Europe/Berlin.
+# rpool is left to Debian's /etc/cron.d/zfsutils-linux (second Sunday 00:24).
+# tank is opted out of that job via org.debian:periodic-scrub=disable so the
+# two never overlap (Sep 2026 they did: 00:24 and 03:00 the same night).
+
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+0 3 * * 0 root zpool scrub tank

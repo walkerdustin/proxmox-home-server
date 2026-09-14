@@ -103,27 +103,7 @@ Configs in this folder:
 
 ZFS zvol devices (`zd*`) are not SMART targets — correctly ignored.
 
-### Temps observed 2026-08-16
-
-| When | `sda` | `sde` | `sdf` | SSDs |
-|------|-------|-------|-------|------|
-| First collect (~18:42, light) | 39 °C | 42 °C | 38 °C | 31–35 °C |
-| Under oCIS sync (~19:25) | 41 °C | **45 °C** | 41 °C | 33–35 °C |
-
-All six **Passed**. Treat sustained **≥50 °C** as “improve airflow”; **≥55 °C** as urgent. Watch **`sde`** first under heavy `tank` writes.
-
-**Note:** First collect logged `smartctl` checksum error on `/dev/sda` (common on some Seagate consumer drives); data still published.
-
-### Live check (host shell, not Scrutiny)
-
-```bash
-for d in /dev/sd{a,b,c,d,e,f}; do
-  printf '%-8s ' "$d"
-  smartctl -A "$d" 2>/dev/null | awk '
-    /Temperature_Celsius|Airflow_Temperature_Cel|Current Drive Temperature/ {print; found=1}
-    END { if (!found) print "(no temp attr)" }'
-done
-```
+Watch **`WS109WW8`** first under heavy `tank` writes (hottest of the three HDDs). Treat sustained **≥50 °C** as “improve airflow”; **≥55 °C** as urgent.
 
 ---
 
@@ -141,15 +121,7 @@ docker compose pull && docker compose up -d   # only when intentionally upgradin
 
 ### Collector (on host)
 
-```bash
-systemctl list-timers | grep scrutiny
-systemctl status scrutiny-collector.timer --no-pager
-# manual run
-systemctl start scrutiny-collector.service
-# or:
-/opt/scrutiny/bin/scrutiny-collector-metrics run \
-  --api-endpoint http://192.168.1.20:8080 --host-id pve
-```
+Unit: `scrutiny-collector.timer`. Manual refresh: `systemctl start scrutiny-collector.service`.
 
 ### Upgrade rule
 

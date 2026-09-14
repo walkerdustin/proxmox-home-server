@@ -1,8 +1,9 @@
 # Proxmox host (`pve`)
 
 **Status:** Production  
-**Last verified:** 2026-08-22  
+**Last verified:** 2026-09-14  
 **Management:** https://192.168.1.10:8006  
+**SSH:** `ssh proxmox` (or `ssh pve`) as root.
 
 Working facts: [`../../memory.md`](../../memory.md) · Rebuild networking: [`../../opnsense-rebuild-guide.md`](../../opnsense-rebuild-guide.md)
 
@@ -22,11 +23,11 @@ If another doc disagrees with this table, this table wins.
 | **04:10** daily | Snapshot `rpool/data/vm-101-disk-1` (7 daily) | `pve` | sanoid `template_vmos` |
 | **:25** hourly | ZFS capacity check, both pools | `pve` | [`configs/cron.d-zfs-capacity-alert`](configs/cron.d-zfs-capacity-alert) |
 | **:00 / :20 / :40** | Drive temperature check, all 6 disks | `pve` | [`configs/cron.d-drive-temp-alert`](configs/cron.d-drive-temp-alert) |
-| *interval unverified* | Scrutiny collector pushes SMART data to LXC 102 | `pve` | systemd timer — check: `systemctl list-timers 'scrutiny*'` |
-| **Sun 03:00** weekly | `zpool scrub tank` | `pve` | `/etc/cron.d/zfs-scrub-tank` |
+| every 15 min | Scrutiny collector pushes SMART data to LXC 102 | `pve` | `scrutiny-collector.timer` |
+| **Sun 03:00** weekly | `zpool scrub tank` | `pve` | [`configs/cron.d-zfs-scrub-tank`](configs/cron.d-zfs-scrub-tank) |
+| **2nd Sun 00:24** monthly | `zpool scrub rpool` only | `pve` | `/etc/cron.d/zfsutils-linux` (`tank` opted out, see below) |
 | weekly (Mon) | `fstrim` — returns freed guest blocks to ZFS | **VM 101** | `fstrim.timer` (systemd default) |
 | *manual only* | Seafile `seaf-gc.sh` — must **never** overlap a backup or dump | VM 101 | — |
-| *unverified* | `rpool` scrub — Debian's zfsutils cron may or may not be present | `pve` | check: `ls /etc/cron.d/` |
 
 **The 03:15 / 04:00 ordering is deliberate**, not incidental: the guest dumps its databases
 *before* the data zvol is snapshotted, so every daily snapshot contains the block store **and**
@@ -40,7 +41,7 @@ and the `cloud@dustinwalker.de` alias (Seafile) -- **both draw on one Zoho per-u
 | Event | Detected by | Transport | State |
 |-------|-------------|-----------|-------|
 | Pool degraded / faulted / checksum errors | ZED | `mail` -> postfix -> `/root/.forward` -> `proxmox-mail-forward` -> `zoho-smtp` | Path proven 2026-08-22. A real DEGRADED event was never staged -- `zinject` is not shipped by Proxmox |
-| **Every scrub finish**, clean or not | ZED, `ZED_NOTIFY_VERBOSE=1` | same as above | **Verified 2026-08-22.** Doubles as a weekly **heartbeat** for this entire chain |
+| **Every scrub finish**, clean or not | ZED `scrub_finish-notify.sh` | **`curl` straight to `smtp.zoho.eu:465`** (HTML) | Subject is `scrub on "pool" -> no error` or `... -> ERROR!!`. Colour is in the body. Stock ZED mail-to-root cannot carry HTML through `proxmox-mail-forward` |
 | Pool nearly full (alloc >= 85%, or `AVAIL` below floor) | `zfs-capacity-alert.sh` | **`curl` straight to `smtp.zoho.eu:465`** -- deliberately independent of postfix and pmxcfs | Verified 2026-08-18 |
 | Proxmox jobs, and Notifications -> **Test** | PVE notification system | PVE's own SMTP client -> Zoho | Working |
 | Anything doing `mail root` (cron, smartd) | postfix | mail-to-root path | Verified 2026-08-22 |
@@ -50,17 +51,9 @@ and the `cloud@dustinwalker.de` alias (Seafile) -- **both draw on one Zoho per-u
 | **Nightly SQL dump fails** | — | **nothing** | **GAP** -- a failing timer is silent. Needs `OnFailure=` or a check in the capacity script |
 
 **Two transports, and they fail independently.** The Notifications **Test** button uses PVE's
-own SMTP client; ZED uses local `mail`. A passing Test proves nothing about ZED. This is not
-theoretical -- see the `aliases.db` incident in the ZED section below.
-
-```bash
-# is the alert plumbing alive?
-ls -l /etc/aliases.db /usr/libexec/proxmox-mail-forward   # both must exist
-mailq                                                    # must say "Mail queue is empty"
-grep ZED_NOTIFY_VERBOSE /etc/zfs/zed.d/zed.rc            # must be =1
-systemctl list-timers sanoid.timer                       # next run in the future
-stat -c '%y  %n' /var/lib/zfs-capacity-alert/*           # mtimes must advance hourly
-```
+own SMTP client; degraded-pool ZED events use local `mail`; scrub-finish uses curl/Zoho.
+A passing Test proves nothing about ZED. This is not theoretical -- see the `aliases.db`
+incident in the ZED section below.
 
 ---
 
@@ -77,16 +70,15 @@ Hypervisor for the homelab: bridges for WAN/LAN/emergency/DMZ, ZFS storage, and 
 | Board | MSI Z170-A PRO |
 | CPU | Intel Core i5-6600K (4c/4t, AES-NI) |
 | RAM | **32 GB** DDR4 (4×8 GB mixed Kingston/Corsair); typically **JEDEC 2133 MT/s** |
-| Proxmox | VE **8.2.x** (no-subscription repo); kernel `7.0.14-*-pve` |
-| Hostname | `pve` |
+| Proxmox | VE **8.2.x** (no-subscription repo) |
 
 ### NICs
 
-| Name | Altname | MAC | Role / sticker |
-|------|---------|-----|----------------|
-| `nic0` | `enx4ccc6a6de0ed` | `4c:cc:6a:6d:e0:ed` | **EMERGENCY** (onboard) |
-| `nic1` | `enx98b78524968a` | `98:b7:85:24:96:8a` | **WAN** (I350) |
-| `nic2` | `enx98b78524968b` | `98:b7:85:24:96:8b` | **LAN** (I350) |
+| Name | Role / sticker |
+|------|----------------|
+| `nic0` | **EMERGENCY** (onboard) |
+| `nic1` | **WAN** (I350) |
+| `nic2` | **LAN** (I350) |
 
 Idle I350 ports may stay `DOWN` until `ip link set nicX up`.
 
@@ -155,14 +147,8 @@ Set up **2026-08-15** so RAIDZ1/`rpool` problems mail you (degraded pool, scrub 
 | Additional recipient | `mail@dustinwalker.de` |
 | Matcher | `default-matcher`, `mode all` -> target **`zoho-smtp`**. The `mail-to-root` *endpoint* exists but is **not** a matcher target |
 
-**DNS on host (required for SMTP):** resolvers must reach Zoho. Under `vmbr0`:
-
-```text
-dns-nameservers 192.168.1.1 1.1.1.1
-dns-search local
-```
-
-If Test fails with “Temporary failure in name resolution”, fix `/etc/resolv.conf` / those lines first.
+**DNS on host (required for SMTP):** resolvers must reach Zoho. If Test fails with
+“Temporary failure in name resolution”, check `/etc/resolv.conf`.
 
 **Verify:** Datacenter → Notifications → `zoho-smtp` → **Test** → mail arrives at `mail@dustinwalker.de`.
 
@@ -186,20 +172,10 @@ second copy of the password.
 **Covers temperature only.** Reallocated/pending sector growth and failed self-tests are still
 unalerted -- see the notifications table.
 
-| Drive | Dev | Type | Idle | Peak recorded |
-|-------|-----|------|------|---------------|
-| ST2000DM001-1ER164 `Z4Z2CNQR` | `sda` | HDD | 36 | **43** |
-| Samsung SSD 860 EVO 500GB | `sdb` | SSD | 28 | – |
-| Crucial CT120BX500SSD1 | `sdc` | SSD | 32 | 41 |
-| Samsung SSD 850 EVO 250GB | `sdd` | SSD | 29 | – |
-| ST2000NM012A `WS109WW8` | `sde` | HDD | 39 | **47** |
-| ST2000NM012A `WS10P9G6` | `sdf` | HDD | 35 | 42 |
-
 Thresholds live at the top of the script: `TEMP_MAX_HDD` / `TEMP_MAX_SSD`, plus an optional
 per-**serial** override map. Keyed on serial and not `/dev/sdX` because device letters can move
-between reboots. **Both are set to 40 temporarily for validation**; sensible long-term values
-are HDD 45 / SSD 50 (`sde` idles at 39, so 40 will trip under any real load -- which is the
-point of the temporary setting).
+between reboots. **Both are set to 40 temporarily for validation**; long-term HDD 45 / SSD 50.
+`WS109WW8` idles near 39 and is the one that trips under a `tank` scrub.
 
 Non-obvious things this script has to handle:
 
@@ -219,12 +195,7 @@ Non-obvious things this script has to handle:
 Rate limiting: mails when the **set** of over-limit drives changes (so a second drive going hot
 escalates at once rather than being swallowed by a reminder window), then every 6 h while it
 persists, then once on recovery. State in `/var/lib/drive-temp-alert/state`.
-
-```bash
-/usr/local/sbin/drive-temp-alert.sh --test    # always mails, ignores thresholds
-/usr/local/sbin/drive-temp-alert.sh; echo "exit=$?"   # exit 1 = something is over limit
-journalctl -t drive-temp-alert --since today
-```
+`--test` always mails.
 
 **Deliberately not sharing Scrutiny's collector schedule** (which is a systemd timer, not cron).
 One job hanging off another's schedule means a failure in either kills both, and a change to the
@@ -246,31 +217,16 @@ independently -- this cost days of false confidence:
 The break: **`/etc/aliases.db` did not exist**, so postfix refused to resolve `root` and
 deferred every message with `status=deferred (alias database unavailable)`. Silent -- mail piles
 up in the queue instead of erroring anywhere visible. A real scrub notification from
-2026-08-18 22:40 sat undelivered for **3.7 days** until the fix.
+2026-08-18 22:40 sat undelivered for **3.7 days** until `newaliases` + `postqueue -f`.
 
-```bash
-newaliases            # compiles /etc/aliases -> /etc/aliases.db; idempotent
-postqueue -f          # retry deferred mail
-mailq                 # must be empty
-```
+**`ZED_NOTIFY_VERBOSE=1`** stays on in `/etc/zfs/zed.d/zed.rc` so a *stock* zedlet would still
+mail on a clean scrub. The scrub-finish hook itself is **not** the stock one.
+[`configs/zed-scrub-finish-notify.sh`](configs/zed-scrub-finish-notify.sh) replaces
+`/etc/zfs/zed.d/scrub_finish-notify.sh` and mails HTML via curl/Zoho. Degraded-pool / checksum
+events still go mail-to-root. A clean Sunday scrub is a heartbeat for ZED + Zoho, not for postfix.
 
-Health check (all three must hold):
-
-```bash
-ls -l /etc/aliases.db                        # must exist
-ls -l /usr/libexec/proxmox-mail-forward      # note: NOT /usr/libexec/proxmox/...
-mailq                                        # "Mail queue is empty"
-```
-
-**`ZED_NOTIFY_VERBOSE=1`** is set in `/etc/zfs/zed.d/zed.rc` on purpose (backup at
-`/root/zed.rc.bak-2026-08-18`). Default is off, which mails only on *errors* -- so a clean
-weekly scrub would send nothing and silence would be ambiguous. With it on, the Sunday scrub
-emails every week and becomes a **heartbeat for the whole alert chain**: as long as it keeps
-arriving, ZED, postfix, the forwarder, the matcher and Zoho are all alive.
-
-Note `zinject` is **not** shipped by Proxmox's `zfsutils-linux`, so faults cannot be simulated
-that way. A scrub with verbose notifications on is the zero-risk substitute -- no need to
-unplug a disk.
+Test without starting a scrub: `/usr/local/sbin/zed-scrub-finish-notify.sh --test tank`.
+`zinject` is not shipped by Proxmox's `zfsutils-linux`; a scrub is the zero-risk substitute.
 
 ### Local ZFS snapshots (sanoid)
 
@@ -290,12 +246,6 @@ snapshot contains block store **and** a fresh SQL dump = one consistent restore 
 Snapshots protect against deleted libraries / bad `rm` / ransomware / failed upgrades.
 They do **not** protect against pool or site loss — Kopia offsite is still required.
 `autoprune` only touches sanoid's own `autosnap_*` names; `qm snapshot` snapshots are safe.
-
-```bash
-systemctl list-timers sanoid.timer
-zfs list -t snapshot
-zfs list -o name,used,avail,refer,usedbysnapshots tank tank/vm-101-disk-0
-```
 
 **Stale VM snapshots are a hazard once real data exists** — `before-ocis-full-server` and
 `before-seafile-cutover` predated Seafile, so rolling back would have destroyed live data
@@ -349,22 +299,11 @@ Mails on entry into alert, again every 24 h while it persists, and once on recov
 State in `/var/lib/zfs-capacity-alert/<pool>`; delete a file to re-arm.
 
 Credentials in **`/etc/zfs-capacity-alert.cred`** (mode `600`, curl config format, **not in git**);
-passed with `--config` rather than `--user` so the password never appears in `ps`.
+passed with `--config` rather than `--user` so the password never appears in `ps`. `--test` always mails.
 
-```bash
-/usr/local/sbin/zfs-capacity-alert.sh --test    # always mails, ignores thresholds
-/usr/local/sbin/zfs-capacity-alert.sh; echo "exit=$?"   # exit 1 = a pool is in alert
-journalctl -t zfs-capacity-alert --since today
-```
-
-**Weekly `tank` scrub** (errors surface via ZED/Proxmox notifications):
-
-```bash
-# /etc/cron.d/zfs-scrub-tank — Sundays 03:00
-0 3 * * 0 root zpool scrub tank
-```
-
-(Confirm file still present after rebuilds: `cat /etc/cron.d/zfs-scrub-tank`.)
+**Weekly `tank` scrub** stays Sundays 03:00 (`/etc/cron.d/zfs-scrub-tank`). Debian's monthly job
+(`/etc/cron.d/zfsutils-linux`, second Sunday 00:24) still scrubs `rpool`. `tank` is opted out
+with `org.debian:periodic-scrub=disable` so those two never overlap. Do not set that on `rpool`.
 
 ---
 
@@ -383,26 +322,7 @@ No CPU pinning; OPNsense uses high CPU weight (4096). OPNsense **Start at boot =
 
 ## 5. Day-2 ops
 
-```bash
-# Host networking
-ip -br a
-bridge link
-cat /etc/network/interfaces
-
-# Guests
-qm list
-pct list
-qm config 100 | grep -E '^(net|memory|onboot)'
-qm config 101 | grep -E '^(net|memory|scsi|onboot)'
-
-# Guest agent when SSH to DMZ fails
-qm guest exec 101 -- ip -br a
-
-# Mail / ZFS
-# UI: Datacenter → Notifications → zoho-smtp → Test
-zpool status
-zpool scrub -s tank   # status of scrub if running
-```
+When SSH into VM 101's DMZ address fails: `qm guest exec 101 -- ip -br a`
 
 **Backups:** Prefer VM/ZFS snapshots before risky changes. Do not put OPNsense XML in git.
 
