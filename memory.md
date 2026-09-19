@@ -126,7 +126,7 @@ Detail + order: [`homelab-components/seafile/README.md`](homelab-components/seaf
 - [ ] Point clients at `https://cloud.dustinwalker.de` (Seafile clients; remove oCIS ones)
 - [x] Seafile SMTP live 2026-08-18 via `seahub_settings.py` (Zoho EU 465 SSL, from `cloud@` alias) — no SMTP env vars exist; verified with Forgot-Password
 - [ ] Fresh OPNsense XML backup (private)
-- [ ] Kopia offsite → friend’s TrueNAS (`/mnt/data/seafile`: blocks **and** `backup-sql/`). Note: `DMZ → LAN` is now blocked, so a LAN-side seed needs a temporary pass rule above that block
+- [ ] Kopia offsite → friend’s TrueNAS (`/mnt/data/seafile`: blocks **and** `backup-sql/`). **Postponed 2026-09-17** — friend has no capacity; data not treated as important enough for offsite right now. If resumed: `DMZ → LAN` is blocked, so a LAN-side seed needs a temporary pass rule above that block
 - [ ] First restore drill on a disposable VM
 - [ ] Local ZFS snapshots (sanoid) for the VM 101 data disk
 - [x] Nightly Seafile SQL dumps (`seafile-backup-sql.timer`, 03:15, 14-day retention)
