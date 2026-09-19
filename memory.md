@@ -119,7 +119,7 @@ Detail + order: [`homelab-components/seafile/README.md`](homelab-components/seaf
 - [x] Reboot test on VM 101 passed 2026-08-18 (route clean, `/mnt/data` mounted, containers + certs returned)
 - [x] VM 101 renamed `ocis` → `seafile` (2026-08-18); ext4 label stays `ocis-data` (historical)
 - [x] `docker.service` drop-in `RequiresMountsFor=/mnt/data` — blocks containers initializing into an unmounted bind path (`nofail` in fstab would otherwise boot silently without tank)
-- [ ] Default quota 500 GB; friend accounts; self-registration off
+- [x] **Seafile users locked 2026-09-17** — self-registration off; friend accounts exist; per-user quota 500 GB in the Users table (Phillip 1 TB on purpose). No `[quota] default` in `seafile.conf`; new accounts are set by hand when created
 - [x] **DMZ firewall hardened 2026-08-18** — 8 ordered rules on the DMZ interface; DNS restricted to `DMZ address` only (so OPNsense sees every lookup the DMZ makes), `DMZ → LAN net` and `DMZ → This Firewall` blocked **with logging**, egress limited to 53/123/80/443/465 + ICMP. TEMP allow-any **disabled, not deleted** — one-click revert. Rules: [`homelab-components/opnsense/README.md`](homelab-components/opnsense/README.md) §6
 - [ ] Delete the disabled `TEMP allow DMZ outbound` rule once the hardened set has run ~a week (from 2026-08-18)
 - [ ] When seeding Kopia over the LAN, add an explicit pass rule **above** the `DMZ → LAN` block, then remove it again

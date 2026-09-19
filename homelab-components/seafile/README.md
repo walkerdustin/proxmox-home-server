@@ -201,7 +201,7 @@ Carried over from the oCIS build; host-wide items also tracked in [`../../memory
 
 - [ ] **Verify upload + download round-trip** and re-test on mobile data *and* Wi-Fi (split DNS)
 - [ ] **Reboot test** VM 101 — `ip route` shows `default via 10.10.10.1`, no `169.254`, all four containers return, cert persists
-- [ ] **Set default quota 500 GB**, create friend accounts, confirm self-registration disabled
+- [x] **Users locked 2026-09-17** — self-registration off; accounts exist; 500 GB per user in the Users table (Phillip 1 TB). Global `[quota] default` left unset on purpose: new users are created by hand
 - [x] **DMZ firewall hardened 2026-08-18** — 8 ordered rules; `DMZ → LAN` and `DMZ → This Firewall` blocked + logged; TEMP allow-any disabled (not deleted). See [`../opnsense/README.md`](../opnsense/README.md) §6
 - [ ] **Clients** — Seafile desktop/mobile against `https://cloud.dustinwalker.de`; remove oCIS clients and their old sync folders
 - [x] **SMTP live 2026-08-18** — verified end-to-end via the Forgot-Password flow
