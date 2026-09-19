@@ -152,4 +152,4 @@ Detail + order: [`homelab-components/seafile/README.md`](homelab-components/seaf
 - [ ] **Restore drill** — rehearse SQL dump + snapshot restore on a throwaway VM; own docs call it non-negotiable
 - [ ] ZFS ARC ~4 GB cap if needed under load
 - [ ] Crucial SSD as local backup target
-- [ ] Dockploy — see [`homelab-components/dockploy/`](homelab-components/dockploy/)
+- [x] **Dockploy VM 103 live 2026-09-17** — Debian 13.7 on DMZ `10.10.10.20`, 4 vCPU / 8 GB / 40G, Dokploy v0.30.6 + Traefik 3.6.7. Panel is LAN-only at `http://10.10.10.20:3000` (`/register` until admin exists). Swarm advertise addr is the DMZ IP, not the WAN. HAProxy/DNS for public apps not wired yet. Docs: [`homelab-components/dockploy/`](homelab-components/dockploy/)

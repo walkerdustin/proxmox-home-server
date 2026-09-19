@@ -60,7 +60,7 @@ incident in the ZED section below.
 
 ## 1. Role
 
-Hypervisor for the homelab: bridges for WAN/LAN/emergency/DMZ, ZFS storage, and VMs (OPNsense, Seafile, later Dockploy).
+Hypervisor for the homelab: bridges for WAN/LAN/emergency/DMZ, ZFS storage, and VMs (OPNsense, Seafile, Dockploy).
 
 ---
 
@@ -334,7 +334,7 @@ with `org.debian:periodic-scrub=disable` so those two never overlap. Do not set 
 | 100 | `opnsense` | Edge router / firewall / HAProxy | Live — [`../opnsense/`](../opnsense/) |
 | 101 | `seafile` (renamed from `ocis` 2026-08-18) | File cloud — Seafile 13 CE | Live — [`../seafile/`](../seafile/) |
 | 102 | `scrutiny` | SMART / temp hub (LXC) | Live — [`../scrutiny/`](../scrutiny/) |
-| *(later)* | Dockploy | Public apps | Planned — [`../dockploy/`](../dockploy/) |
+| 103 | `dockploy` | Public apps (Dokploy) | Live (LAN panel) — [`../dockploy/`](../dockploy/) |
 
 No CPU pinning; OPNsense uses high CPU weight (4096). OPNsense **Start at boot = Yes**.
 

@@ -191,7 +191,7 @@ Reach UI at `https://192.168.1.1:8443` from the house LAN only.
 | `wan-https` | `0.0.0.0:443` | SSL/HTTPS (TCP mode), SSL offloading **off** | inspect-delay → accept-tls-hello → route-cloud-https |
 | `wan-http` | `0.0.0.0:80` | HTTP, SSL offloading **off** | route-cloud-http |
 
-Later Dockploy: add SNI/Host rules + pools the same way (no redesign).
+VM 103 `dockploy` is live at `10.10.10.20` (LAN panel `:3000`). Public apps still need SNI/Host rules + pools the same way as `cloud.*` (no redesign).
 
 ---
 

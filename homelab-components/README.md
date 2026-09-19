@@ -15,7 +15,7 @@ Long planning notes and cutover playbooks stay in the repo root (e.g. `homeserve
 | [`seafile/`](seafile/) | Seafile 13 CE (private file cloud) | Live |
 | [`ocis/`](ocis/) | ownCloud Infinite Scale | **Decommissioned 2026-08-17** (history) |
 | [`scrutiny/`](scrutiny/) | Scrutiny SMART / drive temps (LXC 102) | Live |
-| [`dockploy/`](dockploy/) | Dockploy / public apps | Planned |
+| [`dockploy/`](dockploy/) | Dockploy / public apps | Live (LAN panel; no public hostname yet) |
 
 ## Folder layout
 

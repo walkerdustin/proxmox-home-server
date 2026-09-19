@@ -1,0 +1,12 @@
+#cloud-config
+# Vendor data for Proxmox VM 103 (dockploy). Applied via:
+#   qm set 103 --cicustom vendor=local:snippets/dockploy-vendor.yml
+# Does not replace Proxmox-generated user-data (SSH keys, hostname, IP).
+
+timezone: Europe/Berlin
+package_update: true
+package_upgrade: true
+packages:
+  - qemu-guest-agent
+runcmd:
+  - systemctl enable --now qemu-guest-agent
