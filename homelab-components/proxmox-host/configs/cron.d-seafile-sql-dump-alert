@@ -1,0 +1,13 @@
+# /etc/cron.d/seafile-sql-dump-alert  --  Proxmox host `pve`
+#
+# Daily at 12:00 Europe/Berlin -- well after the 03:15 dump on VM 101 and
+# the 04:00 sanoid snapshot of the same zvol. Output goes to the journal:
+#
+#   journalctl -t seafile-sql-dump-alert --since today
+#
+# The script exits 1 while the dump is missing. That is expected on a real
+# failure (and is the mail trigger), not a cron problem.
+
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+0 12 * * * root /usr/local/sbin/seafile-sql-dump-alert.sh 2>&1 | logger -t seafile-sql-dump-alert

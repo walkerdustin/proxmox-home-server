@@ -167,12 +167,15 @@ DB-first, per [`backup-to-truenas.md`](backup-to-truenas.md) §2.
 | Output | `/mnt/data/seafile/backup-sql/<stamp>/{ccnet,seafile,seahub}_db.sql` |
 | Retention (local) | 14 days |
 | Tooling | `mariadb-dump --opt --single-transaction` (not the deprecated `mysqldump` wrapper) |
+| Failure mail | Host cron at **12:00** — [`../proxmox-host/configs/seafile-sql-dump-alert.sh`](../proxmox-host/configs/seafile-sql-dump-alert.sh). The guest timer itself is silent on failure |
 
 Dumps land on `tank` beside the block store deliberately: one Kopia job and one ZFS snapshot then capture a **consistent restore set**.
 
 ```bash
 sudo systemctl list-timers seafile-backup-sql.timer
 sudo journalctl -u seafile-backup-sql.service -n 50
+# on pve:
+/usr/local/sbin/seafile-sql-dump-alert.sh --test
 ```
 
 ### Common failures

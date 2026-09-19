@@ -1,7 +1,7 @@
 # Proxmox host (`pve`)
 
 **Status:** Production  
-**Last verified:** 2026-09-14  
+**Last verified:** 2026-09-17  
 **Management:** https://192.168.1.10:8006  
 **SSH:** `ssh proxmox` (or `ssh pve`) as root.
 
@@ -23,6 +23,7 @@ If another doc disagrees with this table, this table wins.
 | **04:10** daily | Snapshot `rpool/data/vm-101-disk-1` (7 daily) | `pve` | sanoid `template_vmos` |
 | **:25** hourly | ZFS capacity check, both pools | `pve` | [`configs/cron.d-zfs-capacity-alert`](configs/cron.d-zfs-capacity-alert) |
 | **:00 / :20 / :40** | Drive temperature check, all 6 disks | `pve` | [`configs/cron.d-drive-temp-alert`](configs/cron.d-drive-temp-alert) |
+| **12:00** daily | Seafile SQL dump present on VM 101? | `pve` | [`configs/cron.d-seafile-sql-dump-alert`](configs/cron.d-seafile-sql-dump-alert) |
 | every 15 min | Scrutiny collector pushes SMART data to LXC 102 | `pve` | `scrutiny-collector.timer` |
 | **Sun 03:00** weekly | `zpool scrub tank` | `pve` | [`configs/cron.d-zfs-scrub-tank`](configs/cron.d-zfs-scrub-tank) |
 | **2nd Sun 00:24** monthly | `zpool scrub rpool` only | `pve` | `/etc/cron.d/zfsutils-linux` (`tank` opted out, see below) |
@@ -48,7 +49,7 @@ and the `cloud@dustinwalker.de` alias (Seafile) -- **both draw on one Zoho per-u
 | Seafile app mail (shares, password reset) | Seahub | `seahub_settings.py` -> `smtp.zoho.eu:465` via `cloud@` alias | Verified 2026-08-18 |
 | **Drive temperature** over ceiling | `drive-temp-alert.sh` | `curl` straight to `smtp.zoho.eu:465` | Verified 2026-08-22. HTML table of **all** drives every mail |
 | **SMART: reallocated / pending sectors, self-test failures** | Scrutiny collects it, nothing alerts on it | — | **GAP** -- growing bad sectors predict failure better than temperature does, and ZFS reports `ONLINE` throughout |
-| **Nightly SQL dump fails** | — | **nothing** | **GAP** -- a failing timer is silent. Needs `OnFailure=` or a check in the capacity script |
+| **Nightly SQL dump missing / too small** | `seafile-sql-dump-alert.sh` (noon, via guest agent) | **`curl` straight to `smtp.zoho.eu:465`** | Verified `--test` 2026-09-17. Today's dump was present |
 
 **Two transports, and they fail independently.** The Notifications **Test** button uses PVE's
 own SMTP client; degraded-pool ZED events use local `mail`; scrub-finish uses curl/Zoho.
@@ -201,6 +202,25 @@ persists, then once on recovery. State in `/var/lib/drive-temp-alert/state`.
 One job hanging off another's schedule means a failure in either kills both, and a change to the
 collector's timer would silently change this alert. Reading Scrutiny's API would also make the alert depend on LXC 102 being up to tell
 you a disk is overheating. SMART attribute reads are cheap, so polling twice costs nothing.
+
+### Seafile SQL dump alert
+
+Set up **2026-09-17**. Script [`configs/seafile-sql-dump-alert.sh`](configs/seafile-sql-dump-alert.sh)
+-> `/usr/local/sbin/`, schedule [`configs/cron.d-seafile-sql-dump-alert`](configs/cron.d-seafile-sql-dump-alert)
+-> `/etc/cron.d/`. Daily at **12:00**. Shares `/etc/zfs-capacity-alert.cred`.
+
+The dump timer on VM 101 (`seafile-backup-sql.timer`, 03:15) does not mail on failure.
+This check is the signal. It runs on `pve` via `qm guest exec` (guest agent is enabled)
+so the SMTP password stays off the DMZ VM. SSH into 10.10.10.10 is not used.
+
+At noon it looks for `/mnt/data/seafile/backup-sql/YYYY-MM-DD-*` using the **guest's**
+date, then requires `ccnet_db.sql`, `seafile_db.sql`, `seahub_db.sql` above small size
+floors (1K / 1K / 10K). Observed 2026-09-17: 13K / 46K / 48M. Guest-agent down counts
+as a failed check. Mails every failed noon run, and once when it recovers.
+`--test` always mails and does not touch `/var/lib/seafile-sql-dump-alert/state`.
+
+Not an `OnFailure=` unit on the guest: that would need a fourth copy of the Zoho
+password, and it would miss a disabled timer or a dump that exited 0 with empty files.
 
 ### ZED -> email: the `mail-to-root` path is separate, and it was silently broken
 
